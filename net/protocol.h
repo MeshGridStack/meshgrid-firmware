@@ -47,8 +47,8 @@
 /*
  * Timing constants (milliseconds)
  */
-#define MESHGRID_ADVERT_INTERVAL_MS     (5 * 60 * 1000)
-#define MESHGRID_LOCAL_ADVERT_MS        (30 * 1000)
+#define MESHGRID_ADVERT_INTERVAL_MS     (12 * 60 * 60 * 1000)  /* 12 hours (flood) */
+#define MESHGRID_LOCAL_ADVERT_MS        (2 * 60 * 1000)       /* 2 minutes (local) */
 #define MESHGRID_NEIGHBOR_TIMEOUT_MS    (15 * 60 * 1000)
 #define MESHGRID_RETRANSMIT_BASE_MS     100
 #define MESHGRID_RETRANSMIT_MAX_MS      5000
@@ -191,6 +191,8 @@ struct meshgrid_neighbor {
     enum meshgrid_node_type node_type; /* Inferred node type */
     enum meshgrid_firmware firmware;   /* Detected firmware */
     uint8_t hops;                      /* Hop count when first seen */
+    uint8_t shared_secret[32];         /* Cached ECDH shared secret */
+    bool secret_valid;                 /* True if shared_secret is cached */
 };
 
 /*
@@ -236,7 +238,7 @@ int meshgrid_packet_encode(const struct meshgrid_packet *pkt, uint8_t *buf, size
 int meshgrid_packet_parse(const uint8_t *buf, size_t len, struct meshgrid_packet *pkt);
 
 /* Should we forward this packet? */
-bool meshgrid_should_forward(const struct meshgrid_packet *pkt, uint8_t our_hash);
+bool meshgrid_should_forward(const struct meshgrid_packet *pkt, uint8_t our_hash, enum meshgrid_device_mode mode);
 
 /* Calculate retransmit delay based on path length */
 uint32_t meshgrid_retransmit_delay(const struct meshgrid_packet *pkt, uint32_t random_byte);

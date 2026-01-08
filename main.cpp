@@ -14,6 +14,8 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 #include <SPI.h>
+#include <Preferences.h>
+#include <mbedtls/base64.h>
 
 #include "lib/board.h"
 #include "version.h"
@@ -27,15 +29,30 @@ extern "C" {
 
 #include "boards/boards.h"
 
+/* Application modules */
+#include "app/neighbors.h"
+#include "app/messaging.h"
+#include "app/config.h"
+#include "app/commands.h"
+
+/*
+ * MeshCore Public Channel (for group messaging support)
+ * PSK: Base64-encoded pre-shared key for the default "Public" group channel
+ * Compatible with MeshCore's standard public channel
+ */
+#define PUBLIC_CHANNEL_PSK "izOH6cXN6mrJ5e26oRXNcg=="
+uint8_t public_channel_secret[32];  /* Decoded PSK - defined here, used in config.cpp */
+uint8_t public_channel_hash = 0;     /* Hash of the public channel */
+
 /*
  * Configuration - set via serial commands or stored in flash
  */
-static enum meshgrid_device_mode device_mode = MODE_REPEATER;
+enum meshgrid_device_mode device_mode = MODE_CLIENT;
 
 /*
  * Board and hardware
  */
-static const struct board_config *board;
+const struct board_config *board;
 SX1262 *radio = nullptr;  /* Non-static for hw_test access */
 static SPIClass *radio_spi = nullptr;
 static U8G2 *display = nullptr;
@@ -43,25 +60,46 @@ static U8G2 *display = nullptr;
 /*
  * Mesh state
  */
-static struct meshgrid_state mesh;
-static uint32_t boot_time;
+struct meshgrid_state mesh;
+uint32_t boot_time;
+
+/*
+ * RTC time tracking (set via /time command)
+ */
+struct rtc_time_t {
+    bool valid;
+    uint32_t epoch_at_boot;  /* Unix timestamp when device booted */
+};
+struct rtc_time_t rtc_time = {false, 0};
+
+/*
+ * Radio configuration (saved to flash)
+ */
+Preferences prefs;
+struct radio_config_t {
+    float frequency;
+    float bandwidth;
+    uint8_t spreading_factor;
+    uint8_t coding_rate;
+    uint16_t preamble_len;
+    int8_t tx_power;
+    bool config_saved;
+} radio_config;
 
 /*
  * Seen packets table (for deduplication)
  */
 #define SEEN_TABLE_SIZE 64
-static struct {
+struct seen_entry {
     uint8_t hash;
     uint32_t time;
 } seen_table[SEEN_TABLE_SIZE];
-static uint8_t seen_idx = 0;
+uint8_t seen_idx = 0;
 
 /*
- * Neighbor table
+ * Neighbor table - defined in neighbors.cpp
  */
-#define MAX_NEIGHBORS 32
-static struct meshgrid_neighbor neighbors[MAX_NEIGHBORS];
-static uint8_t neighbor_count = 0;
+// Neighbors are now in app/neighbors.cpp
 
 /*
  * Display screens
@@ -71,13 +109,14 @@ enum display_screen {
     SCREEN_NEIGHBORS = 1,   /* Neighbor list */
     SCREEN_STATS = 2,       /* Detailed statistics */
     SCREEN_INFO = 3,        /* Device info */
-    SCREEN_COUNT = 4
+    SCREEN_RADIO = 4,       /* Radio configuration */
+    SCREEN_COUNT = 5
 };
 
 static enum display_screen current_screen = SCREEN_STATUS;
-static bool display_dirty = true;
+bool display_dirty = true;
 static uint8_t neighbor_scroll = 0;  /* Scroll offset for neighbor list */
-static uint32_t last_activity_time = 0;
+uint32_t last_activity_time = 0;
 
 /*
  * Button state
@@ -91,22 +130,33 @@ static uint32_t last_button_check = 0;
 /*
  * Statistics
  */
-static uint32_t stat_flood_rx = 0;
-static uint32_t stat_flood_fwd = 0;
-static uint32_t stat_duplicates = 0;
-static uint32_t stat_clients = 0;
-static uint32_t stat_repeaters = 0;
-static uint32_t stat_rooms = 0;
+uint32_t stat_flood_rx = 0;
+uint32_t stat_flood_fwd = 0;
+uint32_t stat_duplicates = 0;
+uint32_t stat_clients = 0;
+uint32_t stat_repeaters = 0;
+uint32_t stat_rooms = 0;
 
 /*
  * Monitor mode - output ADV/MSG events when true
  */
-static bool monitor_mode = false;
+bool monitor_mode = false;
+
+/*
+ * Event log buffer (circular)
+ */
+#define LOG_BUFFER_SIZE 50
+String log_buffer[LOG_BUFFER_SIZE];
+int log_index = 0;
+int log_count = 0;
+bool log_enabled = false;
+
+// log_event() moved to app/messaging.cpp
 
 /*
  * Telemetry
  */
-static struct telemetry_data telemetry;
+struct telemetry_data telemetry;
 static uint32_t last_telemetry_read = 0;
 #define TELEMETRY_READ_INTERVAL_MS 5000
 
@@ -114,291 +164,11 @@ static uint32_t last_telemetry_read = 0;
 /* Utility functions                                                         */
 /* ========================================================================= */
 
-static void led_blink(void) {
+void led_blink(void) {
     if (board->power_pins.led < 0) return;
     digitalWrite(board->power_pins.led, HIGH);
     delay(30);
     digitalWrite(board->power_pins.led, LOW);
-}
-
-static uint8_t random_byte(void) {
-    return (uint8_t)random(256);
-}
-
-static uint32_t get_uptime_secs(void) {
-    return (millis() - boot_time) / 1000;
-}
-
-/* ========================================================================= */
-/* Seen table - packet deduplication                                         */
-/* ========================================================================= */
-
-static bool seen_check_and_add(const struct meshgrid_packet *pkt) {
-    uint8_t hash;
-    meshgrid_packet_hash(pkt, &hash);
-
-    uint32_t now = millis();
-
-    /* Check if we've seen this packet recently */
-    for (int i = 0; i < SEEN_TABLE_SIZE; i++) {
-        if (seen_table[i].hash == hash &&
-            (now - seen_table[i].time) < MESHGRID_DUPLICATE_WINDOW_MS) {
-            stat_duplicates++;
-            return true;  /* Already seen */
-        }
-    }
-
-    /* Add to seen table */
-    seen_table[seen_idx].hash = hash;
-    seen_table[seen_idx].time = now;
-    seen_idx = (seen_idx + 1) % SEEN_TABLE_SIZE;
-
-    return false;  /* Not seen before */
-}
-
-/* ========================================================================= */
-/* Neighbor management                                                       */
-/* ========================================================================= */
-
-static struct meshgrid_neighbor *neighbor_find(uint8_t hash) {
-    for (int i = 0; i < neighbor_count; i++) {
-        if (neighbors[i].hash == hash) {
-            return &neighbors[i];
-        }
-    }
-    return nullptr;
-}
-
-/* Infer node type from name prefix */
-static enum meshgrid_node_type infer_node_type(const char *name) {
-    if (strncmp(name, "rpt-", 4) == 0 || strncmp(name, "RPT", 3) == 0 ||
-        strstr(name, "relay") || strstr(name, "Relay") ||
-        strstr(name, "repeater") || strstr(name, "Repeater")) {
-        return NODE_TYPE_REPEATER;
-    }
-    if (strncmp(name, "room-", 5) == 0 || strncmp(name, "Room", 4) == 0 ||
-        strstr(name, "server") || strstr(name, "Server")) {
-        return NODE_TYPE_ROOM;
-    }
-    /* Default to client for user-like names */
-    return NODE_TYPE_CLIENT;
-}
-
-/* Infer firmware from name prefix */
-static enum meshgrid_firmware infer_firmware(const char *name) {
-    if (strncmp(name, "mg-", 3) == 0 || strncmp(name, "MG-", 3) == 0) {
-        return FW_MESHGRID;
-    }
-    if (strncmp(name, "Meshtastic", 10) == 0 || strstr(name, "!")) {
-        return FW_MESHTASTIC;
-    }
-    /* Most nodes are MeshCore */
-    return FW_MESHCORE;
-}
-
-static void neighbor_update(const uint8_t *pubkey, const char *name,
-                            uint32_t timestamp, int16_t rssi, int8_t snr,
-                            uint8_t hops) {
-    uint8_t hash = meshgrid_hash_pubkey(pubkey);
-    struct meshgrid_neighbor *n = neighbor_find(hash);
-    bool is_new = false;
-
-    if (n == nullptr) {
-        is_new = true;
-        /* Add new neighbor */
-        if (neighbor_count >= MAX_NEIGHBORS) {
-            /* Table full - remove oldest */
-            uint32_t oldest_time = neighbors[0].last_seen;
-            int oldest_idx = 0;
-            for (int i = 1; i < neighbor_count; i++) {
-                if (neighbors[i].last_seen < oldest_time) {
-                    oldest_time = neighbors[i].last_seen;
-                    oldest_idx = i;
-                }
-            }
-            /* Decrement stat for old node type */
-            switch (neighbors[oldest_idx].node_type) {
-                case NODE_TYPE_CLIENT: if (stat_clients > 0) stat_clients--; break;
-                case NODE_TYPE_REPEATER: if (stat_repeaters > 0) stat_repeaters--; break;
-                case NODE_TYPE_ROOM: if (stat_rooms > 0) stat_rooms--; break;
-                default: break;
-            }
-            n = &neighbors[oldest_idx];
-        } else {
-            n = &neighbors[neighbor_count++];
-        }
-
-        memcpy(n->pubkey, pubkey, MESHGRID_PUBKEY_SIZE);
-        n->hash = hash;
-        strncpy(n->name, name, MESHGRID_NODE_NAME_MAX);
-        n->name[MESHGRID_NODE_NAME_MAX] = '\0';
-        n->node_type = infer_node_type(name);
-        n->firmware = infer_firmware(name);
-        n->hops = hops;
-
-        /* Update type stats */
-        switch (n->node_type) {
-            case NODE_TYPE_CLIENT: stat_clients++; break;
-            case NODE_TYPE_REPEATER: stat_repeaters++; break;
-            case NODE_TYPE_ROOM: stat_rooms++; break;
-            default: break;
-        }
-
-        /* Debug info for new neighbor - formatted for easy reading */
-        // Serial.print("[NEW] ");
-        // Serial.print(name);
-        // Serial.print(" (");
-        // Serial.print(hash, HEX);
-        // Serial.print(") ");
-        // Serial.print(n->node_type == NODE_TYPE_REPEATER ? "RPT" :
-        //              n->node_type == NODE_TYPE_ROOM ? "ROOM" : "CLI");
-        // Serial.print(" RSSI:");
-        // Serial.print(rssi);
-        // Serial.print(" hops:");
-        // Serial.println(hops);
-    }
-
-    n->last_seen = millis();
-    n->advert_timestamp = timestamp;
-    n->rssi = rssi;
-    n->snr = snr;
-    if (hops < n->hops) n->hops = hops;  /* Track shortest path */
-    last_activity_time = millis();
-}
-
-/* ========================================================================= */
-/* Packet handling                                                           */
-/* ========================================================================= */
-
-static void handle_advert(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
-    uint8_t pubkey[MESHGRID_PUBKEY_SIZE];
-    char name[MESHGRID_NODE_NAME_MAX + 1];
-    uint32_t timestamp;
-
-    if (meshgrid_parse_advert(pkt, pubkey, name, sizeof(name), &timestamp) == 0) {
-        uint8_t hash = meshgrid_hash_pubkey(pubkey);
-        neighbor_update(pubkey, name, timestamp, rssi, snr, pkt->path_len);
-
-        /* Output in CLI-compatible format (only in monitor mode) */
-        if (monitor_mode) {
-            Serial.print("ADV 0x");
-            Serial.print(hash, HEX);
-            Serial.print(" ");
-            Serial.print(rssi);
-            Serial.print(" ");
-            Serial.println(name);
-        }
-
-        display_dirty = true;
-    }
-}
-
-static void handle_text_msg(struct meshgrid_packet *pkt, int16_t rssi) {
-    /* For now, just log encrypted messages */
-    /* TODO: Decrypt if we have the key */
-    Serial.print("[TXT] ");
-    Serial.print(pkt->payload_len);
-    Serial.print(" bytes from path len ");
-    Serial.println(pkt->path_len);
-}
-
-static void handle_group_msg(struct meshgrid_packet *pkt, int16_t rssi) {
-    /* For ROOM mode: decrypt and store/broadcast */
-    /* For other modes: just forward */
-    Serial.print("[GRP] ");
-    Serial.print(pkt->payload_len);
-    Serial.println(" bytes");
-}
-
-/*
- * Process received packet
- */
-static void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
-    struct meshgrid_packet pkt;
-
-    if (meshgrid_packet_parse(buf, len, &pkt) != 0) {
-        Serial.println("[ERR] Bad packet");
-        mesh.packets_dropped++;
-        return;
-    }
-
-    pkt.rssi = rssi;
-    pkt.snr = snr;
-    pkt.rx_time = millis();
-    mesh.packets_rx++;
-    stat_flood_rx++;
-
-    /* Check for duplicates */
-    if (seen_check_and_add(&pkt)) {
-        return;  /* Already processed */
-    }
-
-    /* Handle by payload type */
-    switch (pkt.payload_type) {
-        case PAYLOAD_ADVERT:
-            handle_advert(&pkt, rssi, snr);
-            break;
-        case PAYLOAD_TXT_MSG:
-            handle_text_msg(&pkt, rssi);
-            break;
-        case PAYLOAD_GRP_TXT:
-        case PAYLOAD_GRP_DATA:
-            handle_group_msg(&pkt, rssi);
-            break;
-        case PAYLOAD_ACK:
-            /* ACKs don't need forwarding in flood mode */
-            return;
-        default:
-            break;
-    }
-
-    /* Forward if appropriate (REPEATER mode always forwards, others may filter) */
-    if (meshgrid_should_forward(&pkt, mesh.our_hash)) {
-        /* Add ourselves to path */
-        meshgrid_path_append(&pkt, mesh.our_hash);
-
-        /* Calculate delay based on path length */
-        uint32_t delay_ms = meshgrid_retransmit_delay(&pkt, random_byte());
-
-        /* Re-encode and transmit */
-        uint8_t tx_buf[MESHGRID_MAX_PACKET_SIZE];
-        int tx_len = meshgrid_packet_encode(&pkt, tx_buf, sizeof(tx_buf));
-
-        if (tx_len > 0) {
-            delay(delay_ms);
-            radio->transmit(tx_buf, tx_len);
-            radio->startReceive();
-            mesh.packets_fwd++;
-            stat_flood_fwd++;
-            led_blink();
-        }
-    }
-}
-
-/* ========================================================================= */
-/* Advertising                                                               */
-/* ========================================================================= */
-
-static void send_advertisement(void) {
-    struct meshgrid_packet pkt;
-    uint32_t timestamp = get_uptime_secs();  /* TODO: Use RTC if available */
-
-    meshgrid_create_advert(&pkt, mesh.pubkey, mesh.name, timestamp);
-
-    /* Add our hash to start of path */
-    pkt.path[0] = mesh.our_hash;
-    pkt.path_len = 1;
-
-    uint8_t tx_buf[MESHGRID_MAX_PACKET_SIZE];
-    int tx_len = meshgrid_packet_encode(&pkt, tx_buf, sizeof(tx_buf));
-
-    if (tx_len > 0) {
-        radio->transmit(tx_buf, tx_len);
-        radio->startReceive();
-        mesh.packets_tx++;
-        led_blink();
-        // Serial.println("[ADV] Sent advertisement");
-    }
 }
 
 /* ========================================================================= */
@@ -433,8 +203,8 @@ static void button_check(void) {
                 /* On neighbor screen: scroll up */
                 if (neighbor_scroll > 0) neighbor_scroll--;
             } else {
-                /* Send advertisement */
-                send_advertisement();
+                /* Send local advertisement on button press */
+                send_advertisement(ROUTE_DIRECT);
             }
         } else {
             /* Short press: next screen or scroll down */
@@ -530,7 +300,7 @@ static void draw_screen_status(void) {
 
     /* Footer: Screen indicator */
     display->drawStr(0, 64, "[BTN:next]");
-    display->drawStr(70, 64, "1/4");
+    display->drawStr(70, 64, "1/5");
 }
 
 static void draw_screen_neighbors(void) {
@@ -580,7 +350,7 @@ static void draw_screen_neighbors(void) {
     }
 
     display->drawStr(0, 64, "[BTN:scroll]");
-    display->drawStr(58, 64, "2/4");
+    display->drawStr(58, 64, "2/5");
 }
 
 static void draw_screen_stats(void) {
@@ -602,7 +372,7 @@ static void draw_screen_stats(void) {
     display->drawStr(0, 55, line);
 
     display->drawStr(0, 64, "[BTN:next]");
-    display->drawStr(70, 64, "3/4");
+    display->drawStr(70, 64, "3/5");
 }
 
 static void draw_screen_info(void) {
@@ -623,7 +393,42 @@ static void draw_screen_info(void) {
     display->drawStr(0, 55, line);
 
     display->drawStr(0, 64, "[LONG:advert]");
-    display->drawStr(70, 64, "4/4");
+    display->drawStr(70, 64, "4/5");
+}
+
+static void draw_screen_radio(void) {
+    char line[32];
+
+    draw_header("RADIO CONFIG");
+
+    /* Determine preset name based on frequency */
+    const char *preset = "CUSTOM";
+    if (radio_config.frequency >= 869.0 && radio_config.frequency <= 870.0) {
+        preset = "EU";
+    } else if (radio_config.frequency >= 914.0 && radio_config.frequency <= 916.0) {
+        preset = "US";
+    }
+
+    /* Line 2: Preset and frequency */
+    snprintf(line, sizeof(line), "Preset: %s (%.3f MHz)", preset, radio_config.frequency);
+    display->drawStr(0, 22, line);
+
+    /* Line 3: TX power */
+    snprintf(line, sizeof(line), "Power: %d dBm", radio_config.tx_power);
+    display->drawStr(0, 33, line);
+
+    /* Line 4: Bandwidth and spreading factor */
+    snprintf(line, sizeof(line), "BW: %.1f kHz  SF: %d",
+             radio_config.bandwidth, radio_config.spreading_factor);
+    display->drawStr(0, 44, line);
+
+    /* Line 5: Coding rate and preamble */
+    snprintf(line, sizeof(line), "CR: 4/%d  Pre: %d",
+             radio_config.coding_rate, radio_config.preamble_len);
+    display->drawStr(0, 55, line);
+
+    display->drawStr(0, 64, "[BTN:next]");
+    display->drawStr(70, 64, "5/5");
 }
 
 static void display_update(void) {
@@ -651,6 +456,9 @@ static void display_update(void) {
         case SCREEN_INFO:
             draw_screen_info();
             break;
+        case SCREEN_RADIO:
+            draw_screen_radio();
+            break;
         default:
             break;
     }
@@ -662,336 +470,13 @@ static void display_update(void) {
 /* Serial commands                                                           */
 /* ========================================================================= */
 
+/* Forward declarations - config functions now in app/config.cpp */
+
 /* Helper to print public key as hex */
 static void print_pubkey_hex(void) {
     for (int i = 0; i < MESHGRID_PUBKEY_SIZE; i++) {
         Serial.printf("%02x", mesh.pubkey[i]);
     }
-}
-
-/* CLI JSON commands (for meshgrid-cli) */
-static void handle_cli_command(const String &cmd) {
-    if (cmd == "INFO") {
-        Serial.print("{\"name\":\"");
-        Serial.print(mesh.name);
-        Serial.print("\",\"node_hash\":");
-        Serial.print(mesh.our_hash);
-        Serial.print(",\"public_key\":[");
-        for (int i = 0; i < MESHGRID_PUBKEY_SIZE; i++) {
-            if (i > 0) Serial.print(",");
-            Serial.print(mesh.pubkey[i]);
-        }
-        Serial.print("],\"firmware_version\":\"");
-        Serial.print(MESHGRID_VERSION);
-        Serial.print("\",\"freq_mhz\":");
-        Serial.print(board->lora_defaults.frequency, 2);
-        Serial.print(",\"tx_power_dbm\":");
-        Serial.print(board->lora_defaults.tx_power);
-        Serial.println("}");
-    } else if (cmd == "NEIGHBORS") {
-        Serial.print("[");
-        for (int i = 0; i < neighbor_count; i++) {
-            if (i > 0) Serial.print(",");
-            Serial.print("{\"node_hash\":");
-            Serial.print(neighbors[i].hash);
-            Serial.print(",\"name\":\"");
-            Serial.print(neighbors[i].name);
-            Serial.print("\",\"public_key\":[");
-            for (int j = 0; j < MESHGRID_PUBKEY_SIZE; j++) {
-                if (j > 0) Serial.print(",");
-                Serial.print(neighbors[i].pubkey[j]);
-            }
-            Serial.print("],\"rssi\":");
-            Serial.print(neighbors[i].rssi);
-            Serial.print(",\"snr\":");
-            Serial.print(neighbors[i].snr);
-            Serial.print(",\"last_seen_secs\":");
-            Serial.print((millis() - neighbors[i].last_seen) / 1000);
-            Serial.print("}");
-        }
-        Serial.println("]");
-    } else if (cmd == "TELEMETRY") {
-        Serial.print("{\"device\":{\"battery\":");
-        Serial.print(telemetry.battery_pct);
-        Serial.print(",\"voltage\":");
-        Serial.print(telemetry.battery_mv / 1000.0, 3);
-        Serial.print(",\"charging\":");
-        Serial.print(telemetry.is_charging ? "true" : "false");
-        Serial.print(",\"usb\":");
-        Serial.print(telemetry.is_usb_power ? "true" : "false");
-        Serial.print(",\"uptime\":");
-        Serial.print(get_uptime_secs());
-        Serial.print(",\"heap\":");
-        Serial.print(telemetry.free_heap);
-        if (telemetry.has_temp) {
-            Serial.print(",\"cpu_temp\":");
-            Serial.print(telemetry.temp_deci_c / 10.0, 1);
-        }
-        Serial.println("}}");
-    } else if (cmd == "MONITOR") {
-        monitor_mode = true;
-        Serial.println("OK");
-        /* Monitor mode enabled - will output ADV/MSG/ACK events */
-    } else if (cmd == "REBOOT") {
-        Serial.println("OK");
-        delay(100);
-        ESP.restart();
-    } else if (cmd == "CONFIG") {
-        Serial.print("{\"name\":\"");
-        Serial.print(mesh.name);
-        Serial.print("\",\"freq_mhz\":");
-        Serial.print(board->lora_defaults.frequency, 2);
-        Serial.print(",\"tx_power_dbm\":");
-        Serial.print(board->lora_defaults.tx_power);
-        Serial.print(",\"bandwidth_khz\":");
-        Serial.print((int)(board->lora_defaults.bandwidth));
-        Serial.print(",\"spreading_factor\":");
-        Serial.print(board->lora_defaults.spreading_factor);
-        Serial.print(",\"coding_rate\":");
-        Serial.print(board->lora_defaults.coding_rate);
-        Serial.print(",\"preamble_len\":");
-        Serial.print(board->lora_defaults.preamble_len);
-        Serial.println("}");
-    } else if (cmd.startsWith("SET FREQ ")) {
-        float freq = cmd.substring(9).toFloat();
-        if (freq >= 137.0 && freq <= 1020.0) {
-            radio->setFrequency(freq);
-            Serial.println("OK");
-        } else {
-            Serial.println("ERR Invalid frequency");
-        }
-    } else if (cmd.startsWith("SET BW ")) {
-        float bw = cmd.substring(7).toFloat();
-        if (radio->setBandwidth(bw) == RADIOLIB_ERR_NONE) {
-            Serial.println("OK");
-        } else {
-            Serial.println("ERR Invalid bandwidth");
-        }
-    } else if (cmd.startsWith("SET SF ")) {
-        int sf = cmd.substring(7).toInt();
-        if (sf >= 6 && sf <= 12) {
-            if (radio->setSpreadingFactor(sf) == RADIOLIB_ERR_NONE) {
-                Serial.println("OK");
-            } else {
-                Serial.println("ERR Failed to set SF");
-            }
-        } else {
-            Serial.println("ERR SF must be 6-12");
-        }
-    } else if (cmd.startsWith("SET CR ")) {
-        int cr = cmd.substring(7).toInt();
-        if (cr >= 5 && cr <= 8) {
-            if (radio->setCodingRate(cr) == RADIOLIB_ERR_NONE) {
-                Serial.println("OK");
-            } else {
-                Serial.println("ERR Failed to set CR");
-            }
-        } else {
-            Serial.println("ERR CR must be 5-8");
-        }
-    } else if (cmd.startsWith("SET POWER ")) {
-        int power = cmd.substring(10).toInt();
-        if (power >= -9 && power <= 22) {
-            if (radio->setOutputPower(power) == RADIOLIB_ERR_NONE) {
-                Serial.println("OK");
-            } else {
-                Serial.println("ERR Failed to set power");
-            }
-        } else {
-            Serial.println("ERR Power must be -9 to 22 dBm");
-        }
-    } else if (cmd.startsWith("SET PREAMBLE ")) {
-        int preamble = cmd.substring(13).toInt();
-        if (preamble >= 6 && preamble <= 65535) {
-            if (radio->setPreambleLength(preamble) == RADIOLIB_ERR_NONE) {
-                Serial.println("OK");
-            } else {
-                Serial.println("ERR Failed to set preamble");
-            }
-        } else {
-            Serial.println("ERR Preamble must be 6-65535");
-        }
-    } else if (cmd == "SET PRESET EU_NARROW" || cmd == "SET PRESET EU") {
-        /* EU/UK (Narrow) - 869.618 MHz, 62.5 kHz BW, SF8, CR8 */
-        radio->setFrequency(869.618);
-        radio->setBandwidth(62.5);
-        radio->setSpreadingFactor(8);
-        radio->setCodingRate(8);
-        radio->setPreambleLength(8);
-        Serial.println("OK EU/UK Narrow: 869.618MHz 62.5kHz SF8 CR8");
-    } else if (cmd == "SET PRESET US_STANDARD" || cmd == "SET PRESET US") {
-        /* US Standard - 915 MHz, 250 kHz BW, SF10, CR7 */
-        radio->setFrequency(915.0);
-        radio->setBandwidth(250.0);
-        radio->setSpreadingFactor(10);
-        radio->setCodingRate(7);
-        radio->setPreambleLength(16);
-        Serial.println("OK US Standard: 915MHz 250kHz SF10 CR7");
-    } else if (cmd == "SET PRESET US_FAST") {
-        /* US Fast - 915 MHz, 500 kHz BW, SF7, CR5 */
-        radio->setFrequency(915.0);
-        radio->setBandwidth(500.0);
-        radio->setSpreadingFactor(7);
-        radio->setCodingRate(5);
-        radio->setPreambleLength(8);
-        Serial.println("OK US Fast: 915MHz 500kHz SF7 CR5");
-    } else if (cmd == "SET PRESET LONG_RANGE") {
-        /* Long range - SF12, 125 kHz BW */
-        radio->setBandwidth(125.0);
-        radio->setSpreadingFactor(12);
-        radio->setCodingRate(8);
-        radio->setPreambleLength(16);
-        Serial.println("OK Long Range: 125kHz SF12 CR8");
-    } else {
-        Serial.print("ERR Unknown command: ");
-        Serial.println(cmd);
-    }
-}
-
-static char serial_cmd_buf[256];
-static int serial_cmd_len = 0;
-
-static void handle_serial(void) {
-    // Read characters one at a time (non-blocking like MeshCore)
-    bool complete = false;
-    while (Serial.available() && serial_cmd_len < sizeof(serial_cmd_buf) - 1) {
-        char c = Serial.read();
-        if (c == '\n' || c == '\r') {
-            // Complete line received
-            serial_cmd_buf[serial_cmd_len] = '\0';
-            complete = true;
-            break;
-        }
-        serial_cmd_buf[serial_cmd_len++] = c;
-    }
-
-    // Check if we have a complete command
-    if (!complete) {
-        return;  // Not a complete line yet
-    }
-
-    String cmd(serial_cmd_buf);
-    serial_cmd_len = 0;  // Reset for next command
-    cmd.trim();
-    if (cmd.length() == 0) return;
-
-    /* Echo for debugging */
-    if (cmd == "PING") {
-        Serial.println("PONG");
-        return;
-    }
-
-    /* Check for CLI commands (uppercase, no slash) */
-    if (cmd == "INFO" || cmd == "NEIGHBORS" || cmd == "TELEMETRY" ||
-        cmd == "MONITOR" || cmd == "REBOOT" || cmd == "CONFIG" ||
-        cmd.startsWith("SET ") || cmd.startsWith("SEND ") || cmd.startsWith("TRACE ")) {
-        handle_cli_command(cmd);
-        return;
-    }
-
-    /* Human-readable commands */
-    if (cmd == "/mode repeater" || cmd == "/mode rpt") {
-        device_mode = MODE_REPEATER;
-        Serial.println("Mode: REPEATER");
-    } else if (cmd == "/mode room") {
-        device_mode = MODE_ROOM;
-        Serial.println("Mode: ROOM");
-    } else if (cmd == "/mode client" || cmd == "/mode cli") {
-        device_mode = MODE_CLIENT;
-        Serial.println("Mode: CLIENT");
-    } else if (cmd == "/advert" || cmd == "/a") {
-        send_advertisement();
-    } else if (cmd == "/neighbors" || cmd == "/n") {
-        Serial.println("Neighbors:");
-        for (int i = 0; i < neighbor_count; i++) {
-            Serial.print("  ");
-            Serial.print(neighbors[i].name);
-            Serial.print(" (");
-            Serial.print(neighbors[i].hash, HEX);
-            Serial.print(") RSSI:");
-            Serial.print(neighbors[i].rssi);
-            Serial.print(" SNR:");
-            Serial.println(neighbors[i].snr);
-        }
-    } else if (cmd == "/stats" || cmd == "/s") {
-        Serial.println("Statistics:");
-        Serial.print("  RX: "); Serial.println(mesh.packets_rx);
-        Serial.print("  TX: "); Serial.println(mesh.packets_tx);
-        Serial.print("  FWD: "); Serial.println(mesh.packets_fwd);
-        Serial.print("  DROP: "); Serial.println(mesh.packets_dropped);
-        Serial.print("  DUP: "); Serial.println(stat_duplicates);
-        Serial.print("  Uptime: "); Serial.print(get_uptime_secs()); Serial.println("s");
-    } else if (cmd == "/info" || cmd == "/i") {
-        Serial.println("Device Info:");
-        Serial.print("  Firmware: meshgrid v"); Serial.println(MESHGRID_VERSION);
-        Serial.print("  Build: "); Serial.println(MESHGRID_BUILD_DATE);
-        Serial.print("  Board: "); Serial.print(board->vendor); Serial.print(" "); Serial.println(board->name);
-        Serial.print("  Node: "); Serial.print(mesh.name); Serial.print(" ("); Serial.print(mesh.our_hash, HEX); Serial.println(")");
-        Serial.print("  Mode: "); Serial.println(device_mode == MODE_REPEATER ? "REPEATER" :
-                                                  device_mode == MODE_ROOM ? "ROOM" : "CLIENT");
-        Serial.print("  Neighbors: "); Serial.println(neighbor_count);
-    } else if (cmd == "/test battery" || cmd == "/test bat") {
-        Serial.println("Starting battery drain test (1 minute)...");
-        struct hw_test_result result;
-        hw_test_battery(&result, 60000, [](const char *status, uint8_t pct) {
-            Serial.print("  ["); Serial.print(pct); Serial.print("%] ");
-            Serial.println(status);
-        });
-        char buf[256];
-        hw_test_format_result(buf, sizeof(buf), &result, "battery");
-        Serial.println(buf);
-    } else if (cmd == "/test solar") {
-        Serial.println("Starting solar panel test...");
-        struct hw_test_result result;
-        hw_test_solar(&result, [](const char *status, uint8_t pct) {
-            Serial.print("  ["); Serial.print(pct); Serial.print("%] ");
-            Serial.println(status);
-        });
-        char buf[256];
-        hw_test_format_result(buf, sizeof(buf), &result, "solar");
-        Serial.println(buf);
-    } else if (cmd == "/test radio") {
-        Serial.println("Starting radio TX test...");
-        struct hw_test_result result;
-        hw_test_radio(&result, [](const char *status, uint8_t pct) {
-            Serial.print("  ["); Serial.print(pct); Serial.print("%] ");
-            Serial.println(status);
-        });
-        char buf[256];
-        hw_test_format_result(buf, sizeof(buf), &result, "radio");
-        Serial.println(buf);
-    } else if (cmd == "/telemetry" || cmd == "/telem") {
-        Serial.println("Telemetry:");
-        Serial.print("  Battery: "); Serial.print(telemetry.battery_mv); Serial.print("mV (");
-        Serial.print(telemetry.battery_pct); Serial.println("%)");
-        Serial.print("  USB Power: "); Serial.println(telemetry.is_usb_power ? "Yes" : "No");
-        Serial.print("  Charging: "); Serial.println(telemetry.is_charging ? "Yes" : "No");
-        if (telemetry.has_solar) {
-            Serial.print("  Solar: "); Serial.print(telemetry.solar_mv); Serial.println("mV");
-        }
-        if (telemetry.has_temp) {
-            Serial.print("  Temp: "); Serial.print(telemetry.temp_deci_c / 10); Serial.print(".");
-            Serial.print(abs(telemetry.temp_deci_c % 10)); Serial.println("C");
-        }
-        Serial.print("  Free Heap: "); Serial.print(telemetry.free_heap); Serial.println(" bytes");
-        Serial.print("  Uptime: "); Serial.print(telemetry.uptime_secs); Serial.println("s");
-    } else if (cmd == "/help" || cmd == "/h") {
-        Serial.println("Commands:");
-        Serial.println("  /mode repeater|room|client - Set device mode");
-        Serial.println("  /advert - Send advertisement");
-        Serial.println("  /neighbors - List neighbors");
-        Serial.println("  /stats - Show statistics");
-        Serial.println("  /info - Device info");
-        Serial.println("  /telemetry - Show telemetry data");
-        Serial.println("  /test battery - 1-min battery drain test");
-        Serial.println("  /test solar   - Solar panel test");
-        Serial.println("  /test radio   - Radio TX test");
-    } else {
-        Serial.print("Unknown: ");
-        Serial.println(cmd);
-    }
-
-    display_dirty = true;
 }
 
 /* ========================================================================= */
@@ -1013,9 +498,24 @@ static void power_init(void) {
     }
 }
 
+
+// init_public_channel(), config_load(), config_save() moved to app/config.cpp
+
+/* Radio interrupt flag - matches MeshCore's approach */
+static volatile bool radio_interrupt_flag = false;
+
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3)
+void ICACHE_RAM_ATTR radio_isr(void) {
+    radio_interrupt_flag = true;
+}
+#else
+void radio_isr(void) {
+    radio_interrupt_flag = true;
+}
+#endif
+
 static int radio_init(void) {
     const struct radio_pins *pins = &board->radio_pins;
-    const struct lora_config *cfg = &board->lora_defaults;
 
 #if defined(ARCH_ESP32S3) || defined(ARCH_ESP32)
     radio_spi = new SPIClass(HSPI);
@@ -1029,9 +529,9 @@ static int radio_init(void) {
     radio = new SX1262(mod);
 
     Serial.print("Radio init... ");
-    int state = radio->begin(cfg->frequency, cfg->bandwidth, cfg->spreading_factor,
-                             cfg->coding_rate, RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
-                             cfg->tx_power, cfg->preamble_len);
+    int state = radio->begin(radio_config.frequency, radio_config.bandwidth, radio_config.spreading_factor,
+                             radio_config.coding_rate, RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
+                             radio_config.tx_power, radio_config.preamble_len);
 
     if (state != RADIOLIB_ERR_NONE) {
         Serial.print("FAILED: ");
@@ -1039,7 +539,12 @@ static int radio_init(void) {
         return -1;
     }
 
-    if (cfg->use_crc) radio->setCRC(2);
+    if (board->lora_defaults.use_crc) radio->setCRC(1);  /* MeshCore uses CRC mode 1 */
+    radio->explicitHeader();  /* MeshCore uses explicit header mode */
+
+    /* Set up interrupt callback - CRITICAL for packet reception */
+    radio->setPacketReceivedAction(radio_isr);
+
     Serial.println("OK");
     return 0;
 }
@@ -1154,6 +659,9 @@ void setup() {
 
     boot_time = millis();
     identity_init();
+    init_public_channel();  // Initialize MeshCore public channel
+    tx_queue_init();        // Initialize packet transmission queue
+    config_load();  // Load saved radio config from flash
 
     Serial.print("Node: "); Serial.print(mesh.name);
     Serial.print(" ("); Serial.print(mesh.our_hash, HEX); Serial.println(")");
@@ -1184,19 +692,26 @@ void setup() {
         Serial.println("Radio init OK");
         if (board->late_init) board->late_init();
         radio->startReceive();
-        send_advertisement();
+        send_advertisement(ROUTE_DIRECT);  /* Initial local advertisement */
     }
 
     Serial.println("\nReady! Type /help for commands.\n");
 }
 
 void loop() {
-    /* Check for received packet */
-    if (radio_ok && radio->available()) {
+    /* Check for received packet - interrupt-driven approach like MeshCore */
+    if (radio_ok && radio_interrupt_flag) {
+        radio_interrupt_flag = false;  /* Reset flag */
+
         uint8_t rx_buf[MESHGRID_MAX_PACKET_SIZE];
         int len = radio->getPacketLength();
 
         if (len > 0 && len <= MESHGRID_MAX_PACKET_SIZE) {
+            /* Clamp to max valid packet size (header + max path + max payload) */
+            if (len > 1 + 4 + 1 + MESHGRID_MAX_PATH_SIZE + MESHGRID_MAX_PAYLOAD_SIZE) {
+                len = 1 + 4 + 1 + MESHGRID_MAX_PATH_SIZE + MESHGRID_MAX_PAYLOAD_SIZE;
+            }
+
             int state = radio->readData(rx_buf, len);
             if (state == RADIOLIB_ERR_NONE) {
                 int16_t rssi = radio->getRSSI();
@@ -1207,16 +722,30 @@ void loop() {
         radio->startReceive();
     }
 
+    /* Process transmission queue (non-blocking packet forwarding) */
+    if (radio_ok) {
+        tx_queue_process();
+    }
+
     /* Handle serial commands */
     handle_serial();
 
     /* Handle button presses */
     button_check();
 
-    /* Periodic advertisement (every 5 minutes) */
+    /* Periodic advertisement */
     static uint32_t last_advert = 0;
+    static uint32_t last_local_advert = 0;
+
+    /* Local advertisement (every 2 minutes) - ROUTE_DIRECT for nearby discovery */
+    if (millis() - last_local_advert > MESHGRID_LOCAL_ADVERT_MS) {
+        send_advertisement(ROUTE_DIRECT);  /* Zero-hop, neighbors only - logging done in send_advertisement() */
+        last_local_advert = millis();
+    }
+
+    /* Flood advertisement (every 12 hours) - ROUTE_FLOOD for network-wide presence */
     if (millis() - last_advert > MESHGRID_ADVERT_INTERVAL_MS) {
-        send_advertisement();
+        send_advertisement(ROUTE_FLOOD);  /* Network-wide - logging done in send_advertisement() */
         last_advert = millis();
     }
 
@@ -1234,10 +763,30 @@ void loop() {
         last_display = millis();
     }
 
-    /* Heartbeat disabled - interferes with CLI */
-    // static uint32_t last_heartbeat = 0;
-    // if (millis() - last_heartbeat > 30000) {
-    //     Serial.print(".");
-    //     last_heartbeat = millis();
-    // }
+    /* Power saving: Light sleep when on battery and idle (all platforms) */
+    static uint32_t sleep_check_time = 0;
+    if (millis() - sleep_check_time > 2000) {  /* Check every 2 seconds */
+        sleep_check_time = millis();
+
+        /* Only sleep if on battery power (not USB) */
+        if (!telemetry.is_usb_power) {
+            /* Check if idle (no activity for >2 seconds) */
+            uint32_t idle_time = millis() - last_activity_time;
+            if (idle_time > 2000) {
+                /* Enter light sleep for 100ms */
+                /* Radio interrupt will wake us up if packet arrives */
+                #if defined(ARDUINO_ARCH_ESP32)
+                    /* ESP32: Hardware light sleep */
+                    esp_sleep_enable_timer_wakeup(100000);  /* 100ms in microseconds */
+                    esp_light_sleep_start();
+                #elif defined(ARDUINO_ARCH_NRF52)
+                    /* nRF52840: Low-power mode */
+                    __WFI();  /* Wait For Interrupt - lowest power until interrupt */
+                #elif defined(ARDUINO_ARCH_RP2040)
+                    /* RP2040: Sleep briefly */
+                    delay(100);  /* RP2040 will enter low-power during delay */
+                #endif
+            }
+        }
+    }
 }

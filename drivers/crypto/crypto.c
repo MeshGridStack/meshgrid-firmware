@@ -16,6 +16,7 @@
 #include <esp_random.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/sha256.h>
+#include <mbedtls/md.h>
 #elif defined(ARDUINO_ARCH_NRF52)
 #include <nrf_crypto.h>
 #else
@@ -140,13 +141,27 @@ int crypto_encrypt_then_mac(uint8_t *dest, const uint8_t *src, int src_len,
     /* Encrypt first */
     int cipher_len = crypto_encrypt(dest + CRYPTO_MAC_SIZE, src, src_len, shared_secret);
 
-    /* Calculate MAC over ciphertext */
+    /* Calculate HMAC-SHA256 over ciphertext (MeshCore compatible) */
+#if defined(ARDUINO_ARCH_ESP32)
+    uint8_t hmac[CRYPTO_SHA256_SIZE];
+    mbedtls_md_context_t ctx;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1);
+    mbedtls_md_hmac_starts(&ctx, shared_secret, CRYPTO_SHARED_SECRET_SIZE);
+    mbedtls_md_hmac_update(&ctx, dest + CRYPTO_MAC_SIZE, cipher_len);
+    mbedtls_md_hmac_finish(&ctx, hmac);
+    mbedtls_md_free(&ctx);
+
+    /* Prepend truncated HMAC (2 bytes) */
+    dest[0] = hmac[0];
+    dest[1] = hmac[1];
+#else
+    /* Fallback: use plain SHA256 */
     uint8_t mac[CRYPTO_SHA256_SIZE];
     crypto_sha256(mac, CRYPTO_SHA256_SIZE, dest + CRYPTO_MAC_SIZE, cipher_len);
-
-    /* Prepend truncated MAC */
     dest[0] = mac[0];
     dest[1] = mac[1];
+#endif
 
     return CRYPTO_MAC_SIZE + cipher_len;
 }
@@ -160,14 +175,29 @@ int crypto_mac_then_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
     /* Extract MAC */
     uint8_t expected_mac[2] = { src[0], src[1] };
 
-    /* Calculate MAC over ciphertext */
+    /* Calculate HMAC-SHA256 over ciphertext (MeshCore compatible) */
+#if defined(ARDUINO_ARCH_ESP32)
+    uint8_t hmac[CRYPTO_SHA256_SIZE];
+    mbedtls_md_context_t ctx;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1);
+    mbedtls_md_hmac_starts(&ctx, shared_secret, CRYPTO_SHARED_SECRET_SIZE);
+    mbedtls_md_hmac_update(&ctx, src + CRYPTO_MAC_SIZE, src_len - CRYPTO_MAC_SIZE);
+    mbedtls_md_hmac_finish(&ctx, hmac);
+    mbedtls_md_free(&ctx);
+
+    /* Verify HMAC (constant-time compare would be better) */
+    if (expected_mac[0] != hmac[0] || expected_mac[1] != hmac[1]) {
+        return 0;  /* MAC mismatch */
+    }
+#else
+    /* Fallback: use plain SHA256 */
     uint8_t actual_mac[CRYPTO_SHA256_SIZE];
     crypto_sha256(actual_mac, CRYPTO_SHA256_SIZE, src + CRYPTO_MAC_SIZE, src_len - CRYPTO_MAC_SIZE);
-
-    /* Verify MAC (constant-time compare would be better) */
     if (expected_mac[0] != actual_mac[0] || expected_mac[1] != actual_mac[1]) {
         return 0;  /* MAC mismatch */
     }
+#endif
 
     /* Decrypt */
     return crypto_decrypt(dest, src + CRYPTO_MAC_SIZE, src_len - CRYPTO_MAC_SIZE, shared_secret);
