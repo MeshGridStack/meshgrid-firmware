@@ -91,6 +91,7 @@ int crypto_encrypt(uint8_t *dest, const uint8_t *src, int src_len,
 #if defined(ARDUINO_ARCH_ESP32)
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
+    /* MeshCore uses first 16 bytes of 32-byte shared secret for AES-128 */
     mbedtls_aes_setkey_enc(&aes, shared_secret, 128);
 
     /* Pad to block size */

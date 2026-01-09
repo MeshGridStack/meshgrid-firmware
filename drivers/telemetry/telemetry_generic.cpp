@@ -62,6 +62,6 @@ static const struct telemetry_ops generic_telemetry_ops = {
 };
 
 /* Used when no specific board driver is selected */
-#if !defined(BOARD_HELTEC_V3) && !defined(BOARD_TBEAM) && !defined(BOARD_TBEAM_S3)
+#if !defined(BOARD_HELTEC_V3) && !defined(BOARD_HELTEC_V4) && !defined(BOARD_TBEAM) && !defined(BOARD_TBEAM_S3)
 const struct telemetry_ops *board_telemetry_ops = &generic_telemetry_ops;
 #endif

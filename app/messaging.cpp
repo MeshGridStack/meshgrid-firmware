@@ -27,6 +27,43 @@ extern bool display_dirty, monitor_mode, log_enabled;
 extern uint32_t last_activity_time;
 extern enum meshgrid_device_mode device_mode;
 
+/* Custom channels */
+#define MAX_CUSTOM_CHANNELS 50
+struct channel_entry {
+    bool valid;
+    uint8_t hash;
+    char name[17];
+    uint8_t secret[32];
+};
+extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
+extern int custom_channel_count;
+
+/* Message inbox buffers (tiered) */
+#define PUBLIC_MESSAGE_BUFFER_SIZE 100
+#define CHANNEL_MESSAGE_BUFFER_SIZE 5
+#define DIRECT_MESSAGE_BUFFER_SIZE 50
+#define MAX_CUSTOM_CHANNELS 50
+
+struct message_entry {
+    bool valid;
+    bool decrypted;
+    uint8_t sender_hash;
+    char sender_name[17];
+    uint8_t channel_hash;
+    uint32_t timestamp;
+    char text[128];
+};
+
+extern struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
+extern int public_msg_index, public_msg_count;
+
+extern struct message_entry direct_messages[DIRECT_MESSAGE_BUFFER_SIZE];
+extern int direct_msg_index, direct_msg_count;
+
+extern struct message_entry channel_messages[MAX_CUSTOM_CHANNELS][CHANNEL_MESSAGE_BUFFER_SIZE];
+extern int channel_msg_index[MAX_CUSTOM_CHANNELS];
+extern int channel_msg_count[MAX_CUSTOM_CHANNELS];
+
 extern String log_buffer[];
 extern int log_index, log_count;
 #define LOG_BUFFER_SIZE 50
@@ -312,7 +349,11 @@ void handle_advert(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
 
     if (meshgrid_parse_advert(pkt, pubkey, name, sizeof(name), &timestamp) == 0) {
         uint8_t hash = meshgrid_hash_pubkey(pubkey);
-        neighbor_update(pubkey, name, timestamp, rssi, snr, pkt->path_len);
+
+        /* Don't add ourselves to neighbor table */
+        if (hash != mesh.our_hash) {
+            neighbor_update(pubkey, name, timestamp, rssi, snr, pkt->path_len);
+        }
 
         /* Log received advertisement with packet details */
         // Calculate total packet length for verification
@@ -350,15 +391,181 @@ void handle_advert(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
 }
 
 void handle_text_msg(struct meshgrid_packet *pkt, int16_t rssi) {
-    /* For now, just log encrypted messages */
-    /* TODO: Decrypt if we have the key */
-    String log_msg = "RX MSG ";
-    log_msg += String(pkt->payload_len);
-    log_msg += "B ";
-    log_msg += String(rssi);
-    log_msg += "dBm hops:";
-    log_msg += String(pkt->path_len);
-    log_event(log_msg);
+    /* MeshCore format: [dest_hash][src_hash][MAC + encrypted_data] */
+    if (pkt->payload_len < 4) {
+        log_event("RX MSG (too short)");
+        return;
+    }
+
+    uint8_t dest_hash = pkt->payload[0];
+    uint8_t src_hash = pkt->payload[1];
+
+    /* Check if message is for us */
+    if (dest_hash != mesh.our_hash) {
+        /* Not for us - don't try to decrypt */
+        return;
+    }
+
+    /* Try to decrypt with neighbor's shared secret */
+    const uint8_t *shared_secret = neighbor_get_shared_secret(src_hash);
+
+    if (shared_secret != nullptr) {
+        /* We have a shared secret - try to decrypt */
+        uint8_t decrypted[256];
+        int dec_len = crypto_mac_then_decrypt(decrypted,
+                                               &pkt->payload[2],  /* Skip dest_hash and src_hash */
+                                               pkt->payload_len - 2,
+                                               shared_secret);
+
+        if (dec_len > 0) {
+            /* Successfully decrypted - store in inbox */
+            decrypted[dec_len] = '\0';
+
+            struct meshgrid_neighbor *sender = neighbor_find(src_hash);
+            const char *sender_name = sender ? sender->name : "Unknown";
+
+            /* Check if this is MeshCore format (has timestamp + txt_type prefix) */
+            const char *text_start = (char*)decrypted;
+            int text_offset = 0;
+
+            /* MeshCore direct messages start with [timestamp(4)][txt_type(1)][text] */
+            if (dec_len >= 5) {
+                /* Check if sender is MeshCore firmware */
+                bool is_meshcore = (sender && sender->firmware == FW_MESHCORE);
+
+                /* Or heuristically detect: if first 4 bytes look like timestamp and byte 5 is small */
+                if (!is_meshcore && decrypted[4] < 16) {
+                    /* Likely MeshCore format - skip timestamp and txt_type */
+                    is_meshcore = true;
+                }
+
+                if (is_meshcore) {
+                    text_offset = 5;  /* Skip 4-byte timestamp + 1-byte txt_type */
+                    text_start = (char*)&decrypted[5];
+                }
+            }
+
+            /* Store in direct messages buffer */
+            struct message_entry *msg = &direct_messages[direct_msg_index];
+            msg->valid = true;
+            msg->decrypted = true;
+            msg->sender_hash = src_hash;
+            snprintf(msg->sender_name, sizeof(msg->sender_name), "%s", sender_name);
+            msg->channel_hash = 0;  // Direct message
+            msg->timestamp = millis();
+            snprintf(msg->text, sizeof(msg->text), "%.*s", (int)(sizeof(msg->text)-1), text_start);
+
+            direct_msg_index = (direct_msg_index + 1) % DIRECT_MESSAGE_BUFFER_SIZE;
+            if (direct_msg_count < DIRECT_MESSAGE_BUFFER_SIZE) direct_msg_count++;
+
+            String log_msg = "RX MSG from ";
+            log_msg += sender_name;
+            log_msg += " (0x";
+            log_msg += String(src_hash, HEX);
+            log_msg += "): ";
+            log_msg += text_start;
+            log_event(log_msg);
+
+            /* Send ACK (MeshCore compatible) - only for MeshCore formatted messages */
+            if (sender && sender->pubkey[0] != 0 && text_offset == 5) {
+                /* Calculate ACK hash: SHA256(timestamp + txt_type + text + sender_pubkey)[0:4]
+                 * MeshCore format: [timestamp(4)][txt_type(1)][text]
+                 * ACK hash = SHA256([timestamp(4)][txt_type(1)][text] + sender_pubkey)[0:4]
+                 * Use strlen on text to exclude AES padding */
+                size_t text_len = strlen((char*)&decrypted[5]);  /* Text length (no padding) */
+                size_t data_len = 5 + text_len;  /* timestamp(4) + txt_type(1) + text */
+
+                /* Debug: show what we're hashing */
+                Serial.print("DEBUG ACK calc: data_len=");
+                Serial.print(data_len);
+                Serial.print(" text_len=");
+                Serial.print(text_len);
+                Serial.print(" msg=[");
+                for (size_t i = 0; i < min(data_len, (size_t)20); i++) {
+                    if (i > 0) Serial.print(" ");
+                    Serial.print("0x");
+                    if (decrypted[i] < 16) Serial.print("0");
+                    Serial.print(decrypted[i], HEX);
+                }
+                Serial.println("]");
+
+                uint8_t ack_hash_full[32];
+                uint8_t ack_data[256 + 32];  /* decrypted + pubkey */
+                memcpy(ack_data, decrypted, data_len);  /* timestamp + txt_type + text (no padding) */
+                memcpy(&ack_data[data_len], sender->pubkey, MESHGRID_PUBKEY_SIZE);
+                crypto_sha256(ack_hash_full, sizeof(ack_hash_full), ack_data, data_len + MESHGRID_PUBKEY_SIZE);
+
+                /* Send simple ACK packet */
+                struct meshgrid_packet ack_pkt;
+                memset(&ack_pkt, 0, sizeof(ack_pkt));
+                ack_pkt.route_type = ROUTE_DIRECT;  /* Send ACK directly back */
+                ack_pkt.payload_type = PAYLOAD_ACK;
+                ack_pkt.version = 0;
+                ack_pkt.header = MESHGRID_MAKE_HEADER(ack_pkt.route_type, ack_pkt.payload_type, ack_pkt.version);
+
+                /* ACK payload: first 4 bytes of hash */
+                memcpy(ack_pkt.payload, ack_hash_full, 4);
+                ack_pkt.payload_len = 4;
+
+                /* Reverse path for direct reply */
+                if (pkt->path_len > 0) {
+                    for (int i = 0; i < pkt->path_len && i < MESHGRID_MAX_PATH_SIZE; i++) {
+                        ack_pkt.path[i] = pkt->path[pkt->path_len - 1 - i];
+                    }
+                    ack_pkt.path_len = pkt->path_len;
+                } else {
+                    /* No path, add our hash */
+                    ack_pkt.path[0] = mesh.our_hash;
+                    ack_pkt.path_len = 1;
+                }
+
+                /* Encode and transmit ACK */
+                uint8_t tx_buf[MESHGRID_MAX_PACKET_SIZE];
+                int tx_len = meshgrid_packet_encode(&ack_pkt, tx_buf, sizeof(tx_buf));
+                if (tx_len > 0) {
+                    radio->transmit(tx_buf, tx_len);
+                    radio->startReceive();
+                    mesh.packets_tx++;
+
+                    /* Debug: show ACK hash */
+                    String log_msg = "TX ACK hash=0x";
+                    for (int i = 0; i < 4; i++) {
+                        if (ack_hash_full[i] < 16) log_msg += "0";
+                        log_msg += String(ack_hash_full[i], HEX);
+                    }
+                    log_msg += " to 0x";
+                    log_msg += String(src_hash, HEX);
+                    log_event(log_msg);
+                }
+            }
+        } else {
+            /* MAC failed - corrupted or wrong key */
+            String log_msg = "RX MSG from 0x";
+            log_msg += String(src_hash, HEX);
+            log_msg += " MAC FAIL ";
+            log_msg += String(rssi);
+            log_msg += "dBm";
+            log_event(log_msg);
+        }
+    } else {
+        /* No shared secret for this sender - store encrypted in direct messages */
+        struct message_entry *msg = &direct_messages[direct_msg_index];
+        msg->valid = true;
+        msg->decrypted = false;
+        msg->sender_hash = src_hash;
+        snprintf(msg->sender_name, sizeof(msg->sender_name), "0x%02x", src_hash);
+        msg->channel_hash = 0;
+        msg->timestamp = millis();
+        snprintf(msg->text, sizeof(msg->text), "[encrypted %dB - no key]", pkt->payload_len);
+
+        direct_msg_index = (direct_msg_index + 1) % DIRECT_MESSAGE_BUFFER_SIZE;
+        if (direct_msg_count < DIRECT_MESSAGE_BUFFER_SIZE) direct_msg_count++;
+
+        String log_msg = "RX MSG from 0x";
+        log_msg += String(src_hash, HEX);
+        log_msg += " (encrypted - no shared secret)";
+        log_event(log_msg);
+    }
 }
 
 /*
@@ -373,40 +580,131 @@ void handle_group_msg(struct meshgrid_packet *pkt, int16_t rssi) {
 
     uint8_t channel_hash = pkt->payload[0];
 
-    /* Check if this is for the public channel */
+    /* Try to decrypt with known channels */
+    const uint8_t *channel_secret = nullptr;
+    const char *channel_name = nullptr;
+
+    /* Check public channel */
     if (channel_hash == public_channel_hash) {
+        channel_secret = public_channel_secret;
+        channel_name = "Public";
+    } else {
+        /* Check custom channels */
+        for (int i = 0; i < custom_channel_count; i++) {
+            if (custom_channels[i].valid && custom_channels[i].hash == channel_hash) {
+                channel_secret = custom_channels[i].secret;
+                channel_name = custom_channels[i].name;
+                break;
+            }
+        }
+    }
+
+    if (channel_secret != nullptr) {
         /* Attempt to decrypt */
         uint8_t decrypted[256];
         int dec_len = crypto_mac_then_decrypt(decrypted,
                                                &pkt->payload[1],  /* Skip channel hash */
                                                pkt->payload_len - 1,
-                                               public_channel_secret);
+                                               channel_secret);
 
         if (dec_len > 0) {
-            /* Successfully decrypted */
-            decrypted[dec_len] = '\0';  /* Null-terminate for safety */
+            /* Successfully decrypted - parse MeshCore format */
+            decrypted[dec_len] = '\0';
 
-            String log_msg = "RX GRP [Public] ";
-            log_msg += String(rssi);
-            log_msg += "dBm: ";
-            log_msg += String((char*)decrypted);
-            log_event(log_msg);
+            /* MeshCore format: [timestamp(4)][txt_type(1)][sender_name: text] */
+            if (dec_len > 5) {
+                uint8_t txt_type = decrypted[4];
+
+                if ((txt_type >> 2) == 0) {  /* Plain text (type 0) */
+                    /* Text starts at offset 5 */
+                    const char *text = (const char*)&decrypted[5];
+
+                    struct message_entry *msg;
+                    int *msg_index;
+                    int *msg_count;
+                    int buffer_size;
+
+                    /* Determine which buffer to use */
+                    if (channel_hash == public_channel_hash) {
+                        /* Public channel */
+                        msg = &public_messages[public_msg_index];
+                        msg_index = &public_msg_index;
+                        msg_count = &public_msg_count;
+                        buffer_size = PUBLIC_MESSAGE_BUFFER_SIZE;
+                    } else {
+                        /* Find custom channel index */
+                        int ch_idx = -1;
+                        for (int i = 0; i < custom_channel_count; i++) {
+                            if (custom_channels[i].valid && custom_channels[i].hash == channel_hash) {
+                                ch_idx = i;
+                                break;
+                            }
+                        }
+
+                        if (ch_idx >= 0) {
+                            msg = &channel_messages[ch_idx][channel_msg_index[ch_idx]];
+                            msg_index = &channel_msg_index[ch_idx];
+                            msg_count = &channel_msg_count[ch_idx];
+                            buffer_size = CHANNEL_MESSAGE_BUFFER_SIZE;
+                        } else {
+                            /* Unknown channel - skip storing */
+                            goto log_only;
+                        }
+                    }
+
+                    msg->valid = true;
+                    msg->decrypted = true;
+                    msg->sender_hash = (pkt->path_len > 0) ? pkt->path[0] : 0;
+                    snprintf(msg->sender_name, sizeof(msg->sender_name), "0x%02x", msg->sender_hash);
+                    msg->channel_hash = channel_hash;
+                    msg->timestamp = millis();
+                    snprintf(msg->text, sizeof(msg->text), "%.*s", (int)(sizeof(msg->text)-1), text);
+
+                    *msg_index = (*msg_index + 1) % buffer_size;
+                    if (*msg_count < buffer_size) (*msg_count)++;
+
+                log_only:
+
+                    String log_msg = "RX GRP [";
+                    log_msg += channel_name;
+                    log_msg += "] ";
+                    log_msg += String(rssi);
+                    log_msg += "dBm: ";
+                    log_msg += String(text);
+                    log_event(log_msg);
+                }
+            }
         } else {
             /* MAC verification failed */
-            String log_msg = "RX GRP [Public] MAC FAIL ";
+            String log_msg = "RX GRP [";
+            log_msg += channel_name;
+            log_msg += "] MAC FAIL ";
             log_msg += String(rssi);
             log_msg += "dBm";
             log_event(log_msg);
         }
     } else {
-        /* Unknown channel */
+        /* Unknown channel - store encrypted in public buffer (fallback) */
+        struct message_entry *msg = &public_messages[public_msg_index];
+        msg->valid = true;
+        msg->decrypted = false;
+        msg->sender_hash = (pkt->path_len > 0) ? pkt->path[0] : 0;
+        snprintf(msg->sender_name, sizeof(msg->sender_name), "0x%02x", msg->sender_hash);
+        msg->channel_hash = channel_hash;
+        msg->timestamp = millis();
+        snprintf(msg->text, sizeof(msg->text), "[encrypted %dB - channel 0x%02x]",
+                 pkt->payload_len, channel_hash);
+
+        public_msg_index = (public_msg_index + 1) % PUBLIC_MESSAGE_BUFFER_SIZE;
+        if (public_msg_count < PUBLIC_MESSAGE_BUFFER_SIZE) public_msg_count++;
+
         String log_msg = "RX GRP [0x";
         log_msg += String(channel_hash, HEX);
         log_msg += "] ";
         log_msg += String(pkt->payload_len);
         log_msg += "B ";
         log_msg += String(rssi);
-        log_msg += "dBm";
+        log_msg += "dBm (encrypted - unknown channel)";
         log_event(log_msg);
     }
 }
@@ -531,6 +829,7 @@ void send_advertisement(uint8_t route_type) {
 
     meshgrid_create_advert(&pkt, mesh.pubkey, mesh.name, timestamp);
     pkt.route_type = route_type;  /* Override with specified route type */
+    pkt.header = MESHGRID_MAKE_HEADER(pkt.route_type, pkt.payload_type, pkt.version);  /* Update header */
 
     /* Compute signature over pubkey + timestamp + app_data (MeshCore format)
      * Signature goes at offset 36 (after pubkey and timestamp) */
@@ -607,7 +906,14 @@ void send_advertisement(uint8_t route_type) {
     }
 }
 
-void send_text_message(const char *text) {
+void send_text_message(uint8_t dest_hash, const char *text) {
+    /* Get shared secret for destination */
+    const uint8_t *shared_secret = neighbor_get_shared_secret(dest_hash);
+    if (shared_secret == nullptr) {
+        log_event("TX MSG FAIL: No shared secret for destination");
+        return;
+    }
+
     struct meshgrid_packet pkt;
     memset(&pkt, 0, sizeof(pkt));
 
@@ -615,11 +921,37 @@ void send_text_message(const char *text) {
     pkt.route_type = ROUTE_FLOOD;
     pkt.payload_type = PAYLOAD_TXT_MSG;
     pkt.version = 0;
+    pkt.header = MESHGRID_MAKE_HEADER(pkt.route_type, pkt.payload_type, pkt.version);
 
-    /* Add timestamp */
-    uint32_t timestamp = get_uptime_secs();
-    pkt.payload_len = snprintf((char*)pkt.payload, MESHGRID_MAX_PAYLOAD_SIZE,
-                               "%lu:%s", timestamp, text);
+    /* MeshCore format: [dest_hash][src_hash][MAC + encrypted_data] */
+    int i = 0;
+    pkt.payload[i++] = dest_hash;
+    pkt.payload[i++] = mesh.our_hash;
+
+    /* Build plaintext with MeshCore-compatible format: [timestamp(4)][txt_type(1)][text] */
+    uint8_t plaintext[256];
+    int plaintext_len = 0;
+
+    /* Timestamp (4 bytes) - use uptime in seconds */
+    uint32_t timestamp = millis() / 1000;
+    memcpy(&plaintext[plaintext_len], &timestamp, 4);
+    plaintext_len += 4;
+
+    /* Text type (1 byte): TXT_TYPE_PLAIN = 0 */
+    plaintext[plaintext_len++] = 0;
+
+    /* Message text */
+    int text_len = strlen(text);
+    memcpy(&plaintext[plaintext_len], text, text_len);
+    plaintext_len += text_len;
+
+    /* Encrypt the formatted message */
+    int enc_len = crypto_encrypt_then_mac(&pkt.payload[i],
+                                          plaintext,
+                                          plaintext_len,
+                                          shared_secret);
+
+    pkt.payload_len = i + enc_len;
 
     /* Add our hash to start of path */
     pkt.path[0] = mesh.our_hash;
@@ -630,11 +962,34 @@ void send_text_message(const char *text) {
     int tx_len = meshgrid_packet_encode(&pkt, tx_buf, sizeof(tx_buf));
 
     if (tx_len > 0) {
+        /* DEBUG: Print packet details */
+        Serial.print("DEBUG TX type=");
+        Serial.print(pkt.payload_type);
+        Serial.print(" dest=0x");
+        Serial.print(dest_hash, HEX);
+        Serial.print(" src=0x");
+        Serial.print(mesh.our_hash, HEX);
+        Serial.print(" payload_len=");
+        Serial.print(pkt.payload_len);
+        Serial.print(" header=0x");
+        Serial.print(pkt.header, HEX);
+        Serial.print(" payload: ");
+        for (int j = 0; j < min(12, (int)pkt.payload_len); j++) {
+            Serial.print("0x");
+            Serial.print(pkt.payload[j], HEX);
+            Serial.print(" ");
+        }
+        Serial.println();
+
         radio->transmit(tx_buf, tx_len);
         radio->startReceive();
         mesh.packets_tx++;
         led_blink();
-        String log_msg = "TX MSG ";
+
+        struct meshgrid_neighbor *dest = neighbor_find(dest_hash);
+        String log_msg = "TX MSG to ";
+        log_msg += dest ? dest->name : "0x" + String(dest_hash, HEX);
+        log_msg += ": ";
         log_msg += text;
         log_event(log_msg);
     }
@@ -644,6 +999,13 @@ void send_text_message(const char *text) {
  * Send encrypted group message to public channel
  */
 void send_group_message(const char *text) {
+    send_channel_message(public_channel_hash, public_channel_secret, text, "Public");
+}
+
+/*
+ * Send encrypted message to any channel
+ */
+void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name) {
     struct meshgrid_packet pkt;
     memset(&pkt, 0, sizeof(pkt));
 
@@ -651,15 +1013,44 @@ void send_group_message(const char *text) {
     pkt.route_type = ROUTE_FLOOD;
     pkt.payload_type = PAYLOAD_GRP_TXT;
     pkt.version = 0;
+    pkt.header = MESHGRID_MAKE_HEADER(pkt.route_type, pkt.payload_type, pkt.version);
 
-    /* Payload format: [channel_hash][MAC 2 bytes][encrypted text] */
-    pkt.payload[0] = public_channel_hash;
+    /* Payload format: [channel_hash][MAC + encrypted([timestamp(4)][type(1)][sender: text])] */
+    pkt.payload[0] = channel_hash;
 
-    /* Encrypt the message */
+    /* Build plaintext data to encrypt (MeshCore format) */
+    uint8_t plaintext[200];
+    int i = 0;
+
+    /* Timestamp (4 bytes) */
+    uint32_t timestamp = millis() / 1000;
+    memcpy(&plaintext[i], &timestamp, 4);
+    i += 4;
+
+    /* Text type (1 byte): 0 = plain text */
+    plaintext[i++] = 0;
+
+    /* Message with sender prefix: "sender_name: text" */
+    int prefix_len = snprintf((char*)&plaintext[i], sizeof(plaintext) - i, "%s: %s", mesh.name, text);
+    if (prefix_len > 0) i += prefix_len;
+
+    /* DEBUG: Print plaintext before encryption */
+    Serial.print("DEBUG PLAINTEXT len=");
+    Serial.print(i);
+    Serial.print(" bytes: ");
+    for (int j = 0; j < min(i, 64); j++) {
+        if (j > 0) Serial.print(" ");
+        Serial.print("0x");
+        if (plaintext[j] < 16) Serial.print("0");
+        Serial.print(plaintext[j], HEX);
+    }
+    Serial.println();
+
+    /* Encrypt the formatted message */
     int enc_len = crypto_encrypt_then_mac(&pkt.payload[1],
-                                          (const uint8_t*)text,
-                                          strlen(text),
-                                          public_channel_secret);
+                                          plaintext,
+                                          i,
+                                          channel_secret);
 
     pkt.payload_len = 1 + enc_len;  /* channel hash + encrypted data */
 
@@ -672,11 +1063,33 @@ void send_group_message(const char *text) {
     int tx_len = meshgrid_packet_encode(&pkt, tx_buf, sizeof(tx_buf));
 
     if (tx_len > 0) {
+        /* DEBUG: Print packet details */
+        Serial.print("DEBUG TX GRP type=");
+        Serial.print(pkt.payload_type);
+        Serial.print(" channel=0x");
+        Serial.print(channel_hash, HEX);
+        Serial.print(" payload_len=");
+        Serial.print(pkt.payload_len);
+        Serial.print(" enc_len=");
+        Serial.print(enc_len);
+        Serial.print(" header=0x");
+        Serial.print(pkt.header, HEX);
+        Serial.print(" payload: ");
+        for (int j = 0; j < min(12, (int)pkt.payload_len); j++) {
+            if (j > 0) Serial.print(" ");
+            Serial.print("0x");
+            if (pkt.payload[j] < 16) Serial.print("0");
+            Serial.print(pkt.payload[j], HEX);
+        }
+        Serial.println();
+
         radio->transmit(tx_buf, tx_len);
         radio->startReceive();
         mesh.packets_tx++;
         led_blink();
-        String log_msg = "TX GRP [Public]: ";
+        String log_msg = "TX GRP [";
+        log_msg += channel_name;
+        log_msg += "]: ";
         log_msg += text;
         log_event(log_msg);
     }

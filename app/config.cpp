@@ -39,27 +39,44 @@ extern int log_index, log_count;
 
 extern const struct board_config *board;
 
+/* RTC time tracking */
+struct rtc_time_t {
+    bool valid;
+    uint32_t epoch_at_boot;
+};
+extern struct rtc_time_t rtc_time;
+
 #define LOG_BUFFER_SIZE 50
 #define MESHGRID_NODE_NAME_MAX 16
 
 
 void init_public_channel(void) {
     /* Decode Base64 PSK */
+    memset(public_channel_secret, 0, sizeof(public_channel_secret));  /* Zero the buffer first */
+
     size_t olen = 0;
     int ret = mbedtls_base64_decode(public_channel_secret, sizeof(public_channel_secret),
                                      &olen, (const unsigned char*)PUBLIC_CHANNEL_PSK,
                                      strlen(PUBLIC_CHANNEL_PSK));
 
-    if (ret == 0 && olen == 32) {
+    if (ret == 0 && (olen == 16 || olen == 32)) {
+        /* MeshCore supports both 128-bit (16 bytes) and 256-bit (32 bytes) keys */
+        /* If 16 bytes, upper 16 bytes are already zeroed (MeshCore compatible) */
+
         /* Calculate channel hash (first byte of SHA256 of secret) */
         uint8_t hash[32];
-        crypto_sha256(hash, sizeof(hash), public_channel_secret, 32);
+        crypto_sha256(hash, sizeof(hash), public_channel_secret, olen);
         public_channel_hash = hash[0];
 
         Serial.print("Public channel initialized, hash: 0x");
-        Serial.println(public_channel_hash, HEX);
+        Serial.print(public_channel_hash, HEX);
+        Serial.print(" (");
+        Serial.print(olen);
+        Serial.println(" byte key)");
     } else {
-        Serial.println("ERROR: Failed to decode PUBLIC_CHANNEL_PSK");
+        Serial.print("ERROR: Failed to decode PUBLIC_CHANNEL_PSK (got ");
+        Serial.print(olen);
+        Serial.println(" bytes)");
     }
 }
 
@@ -98,6 +115,13 @@ void config_load(void) {
         strncpy(mesh.name, saved_name.c_str(), MESHGRID_NODE_NAME_MAX);
         mesh.name[MESHGRID_NODE_NAME_MAX] = '\0';
         Serial.println("Loaded node name from flash");
+    }
+
+    /* Load RTC time if saved */
+    if (prefs.getBool("rtc_valid", false)) {
+        rtc_time.epoch_at_boot = prefs.getUInt("rtc_epoch", 0);
+        rtc_time.valid = true;
+        Serial.println("Loaded RTC time from flash");
     }
 
     prefs.end();

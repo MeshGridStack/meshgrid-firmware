@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <Preferences.h>
+#include <mbedtls/base64.h>
 
 #include "lib/board.h"
 
@@ -14,6 +15,7 @@ extern "C" {
 #include "net/protocol.h"
 #include "drivers/telemetry/telemetry.h"
 #include "drivers/test/hw_test.h"
+#include "drivers/crypto/crypto.h"
 #include "version.h"
 }
 
@@ -49,14 +51,70 @@ extern bool log_enabled, monitor_mode, display_dirty;
 extern uint32_t stat_duplicates;
 extern uint32_t stat_clients, stat_repeaters, stat_rooms;
 
+/* Custom channels */
+#define MAX_CUSTOM_CHANNELS 50
+
+/* Message inbox buffers (tiered) */
+#define PUBLIC_MESSAGE_BUFFER_SIZE 100
+#define CHANNEL_MESSAGE_BUFFER_SIZE 5
+#define DIRECT_MESSAGE_BUFFER_SIZE 50
+
+struct message_entry {
+    bool valid;
+    bool decrypted;
+    uint8_t sender_hash;
+    char sender_name[17];
+    uint8_t channel_hash;
+    uint32_t timestamp;
+    char text[128];
+};
+
+extern struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
+extern int public_msg_index, public_msg_count;
+
+extern struct message_entry direct_messages[DIRECT_MESSAGE_BUFFER_SIZE];
+extern int direct_msg_index, direct_msg_count;
+
+extern struct message_entry channel_messages[MAX_CUSTOM_CHANNELS][CHANNEL_MESSAGE_BUFFER_SIZE];
+extern int channel_msg_index[MAX_CUSTOM_CHANNELS];
+extern int channel_msg_count[MAX_CUSTOM_CHANNELS];
+
+extern uint8_t public_channel_hash;
+struct channel_entry {
+    bool valid;
+    uint8_t hash;
+    char name[17];
+    uint8_t secret[32];
+};
+extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
+extern int custom_channel_count;
+
 extern void config_save(void);
+extern void neighbors_save_to_nvs(void);
+extern void channels_save_to_nvs(void);
 extern void send_advertisement(uint8_t route);
-extern void send_text_message(const char *text);
+extern void send_text_message(uint8_t dest_hash, const char *text);
 extern void send_group_message(const char *text);
+extern void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name);
 extern uint32_t get_uptime_secs(void);
 
 static char serial_cmd_buf[256];
 static int serial_cmd_len = 0;
+
+/* Escape string for JSON output (replace control chars with .) */
+static void print_json_string(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        char c = str[i];
+        if (c < 32 || c > 126) {
+            Serial.print('.');  // Replace control chars with .
+        } else if (c == '"' || c == '\\') {
+            Serial.print('\\');
+            Serial.print(c);
+        } else {
+            Serial.print(c);
+        }
+    }
+}
 
 void handle_cli_command(const String &cmd) {
     if (cmd == "INFO") {
@@ -219,6 +277,193 @@ void handle_cli_command(const String &cmd) {
         log_index = 0;
         config_save();
         Serial.println("OK Log cleared");
+    } else if (cmd == "MESSAGES" || cmd == "INBOX") {
+        /* Show message inbox - aggregate from all buffers */
+        Serial.print("{\"messages\":[");
+
+        int total_shown = 0;
+
+        /* Show public channel messages */
+        int start = (public_msg_count < PUBLIC_MESSAGE_BUFFER_SIZE) ? 0 : public_msg_index;
+        for (int i = 0; i < public_msg_count; i++) {
+            int idx = (start + i) % PUBLIC_MESSAGE_BUFFER_SIZE;
+            struct message_entry *msg = &public_messages[idx];
+            if (!msg->valid) continue;
+
+            if (total_shown > 0) Serial.print(",");
+            Serial.print("{");
+            Serial.print("\"from_hash\":\"0x"); Serial.print(String(msg->sender_hash, HEX)); Serial.print("\",");
+            Serial.print("\"from_name\":\""); print_json_string(msg->sender_name); Serial.print("\",");
+            Serial.print("\"channel\":\"");
+            if (msg->channel_hash == public_channel_hash) {
+                Serial.print("public");
+            } else {
+                Serial.print("0x"); Serial.print(String(msg->channel_hash, HEX));
+            }
+            Serial.print("\",");
+            Serial.print("\"decrypted\":"); Serial.print(msg->decrypted ? "true" : "false"); Serial.print(",");
+            Serial.print("\"timestamp\":"); Serial.print(msg->timestamp); Serial.print(",");
+            Serial.print("\"text\":\""); print_json_string(msg->text); Serial.print("\"");
+            Serial.print("}");
+            total_shown++;
+        }
+
+        /* Show direct messages */
+        start = (direct_msg_count < DIRECT_MESSAGE_BUFFER_SIZE) ? 0 : direct_msg_index;
+        for (int i = 0; i < direct_msg_count; i++) {
+            int idx = (start + i) % DIRECT_MESSAGE_BUFFER_SIZE;
+            struct message_entry *msg = &direct_messages[idx];
+            if (!msg->valid) continue;
+
+            if (total_shown > 0) Serial.print(",");
+            Serial.print("{");
+            Serial.print("\"from_hash\":\"0x"); Serial.print(String(msg->sender_hash, HEX)); Serial.print("\",");
+            Serial.print("\"from_name\":\""); print_json_string(msg->sender_name); Serial.print("\",");
+            Serial.print("\"channel\":\"direct\",");
+            Serial.print("\"decrypted\":"); Serial.print(msg->decrypted ? "true" : "false"); Serial.print(",");
+            Serial.print("\"timestamp\":"); Serial.print(msg->timestamp); Serial.print(",");
+            Serial.print("\"text\":\""); print_json_string(msg->text); Serial.print("\"");
+            Serial.print("}");
+            total_shown++;
+        }
+
+        /* Show custom channel messages */
+        for (int ch = 0; ch < custom_channel_count; ch++) {
+            if (!custom_channels[ch].valid) continue;
+
+            start = (channel_msg_count[ch] < CHANNEL_MESSAGE_BUFFER_SIZE) ? 0 : channel_msg_index[ch];
+            for (int i = 0; i < channel_msg_count[ch]; i++) {
+                int idx = (start + i) % CHANNEL_MESSAGE_BUFFER_SIZE;
+                struct message_entry *msg = &channel_messages[ch][idx];
+                if (!msg->valid) continue;
+
+                if (total_shown > 0) Serial.print(",");
+                Serial.print("{");
+                Serial.print("\"from_hash\":\"0x"); Serial.print(String(msg->sender_hash, HEX)); Serial.print("\",");
+                Serial.print("\"from_name\":\""); print_json_string(msg->sender_name); Serial.print("\",");
+                Serial.print("\"channel\":\""); print_json_string(custom_channels[ch].name); Serial.print("\",");
+                Serial.print("\"decrypted\":"); Serial.print(msg->decrypted ? "true" : "false"); Serial.print(",");
+                Serial.print("\"timestamp\":"); Serial.print(msg->timestamp); Serial.print(",");
+                Serial.print("\"text\":\""); print_json_string(msg->text); Serial.print("\"");
+                Serial.print("}");
+                total_shown++;
+            }
+        }
+
+        Serial.print("],\"total\":"); Serial.print(total_shown);
+        Serial.println("}");
+    } else if (cmd == "MESSAGES CLEAR") {
+        /* Clear all message buffers */
+        public_msg_count = 0;
+        public_msg_index = 0;
+        direct_msg_count = 0;
+        direct_msg_index = 0;
+        for (int i = 0; i < MAX_CUSTOM_CHANNELS; i++) {
+            channel_msg_count[i] = 0;
+            channel_msg_index[i] = 0;
+        }
+        Serial.println("OK Messages cleared");
+    } else if (cmd == "CHANNELS") {
+        /* List channels */
+        Serial.print("{\"channels\":[");
+        Serial.print("{\"name\":\"Public\",\"hash\":\"0x");
+        Serial.print(String(public_channel_hash, HEX));
+        Serial.print("\",\"builtin\":true}");
+
+        for (int i = 0; i < custom_channel_count; i++) {
+            if (custom_channels[i].valid) {
+                Serial.print(",{\"name\":\"");
+                Serial.print(custom_channels[i].name);
+                Serial.print("\",\"hash\":\"0x");
+                Serial.print(String(custom_channels[i].hash, HEX));
+                Serial.print("\",\"builtin\":false}");
+            }
+        }
+        Serial.print("],\"total\":");
+        Serial.print(1 + custom_channel_count);
+        Serial.println("}");
+    } else if (cmd.startsWith("CHANNEL JOIN ")) {
+        /* Join channel: CHANNEL JOIN <name> <psk_base64> */
+        String args = cmd.substring(13);
+        int space = args.indexOf(' ');
+        if (space < 0) {
+            Serial.println("ERR Usage: CHANNEL JOIN <name> <psk_base64>");
+        } else {
+            String name = args.substring(0, space);
+            String psk = args.substring(space + 1);
+
+            if (custom_channel_count >= MAX_CUSTOM_CHANNELS) {
+                Serial.println("ERR Maximum channels reached");
+            } else {
+                /* Decode PSK */
+                uint8_t secret[32];
+                memset(secret, 0, sizeof(secret));  /* Zero-pad for 16-byte keys */
+
+                size_t olen = 0;
+                int ret = mbedtls_base64_decode(secret, sizeof(secret), &olen,
+                                                 (const unsigned char*)psk.c_str(), psk.length());
+
+                if (ret != 0 || (olen != 16 && olen != 32)) {
+                    Serial.println("ERR Invalid PSK (must be 16 or 32 bytes base64-encoded)");
+                } else {
+                    /* Calculate channel hash (use actual decoded length) */
+                    uint8_t hash_buf[32];
+                    crypto_sha256(hash_buf, sizeof(hash_buf), secret, olen);
+                    uint8_t hash = hash_buf[0];
+
+                    /* Add channel (secret is zero-padded if 16 bytes) */
+                    custom_channels[custom_channel_count].valid = true;
+                    custom_channels[custom_channel_count].hash = hash;
+                    strncpy(custom_channels[custom_channel_count].name, name.c_str(), 16);
+                    custom_channels[custom_channel_count].name[16] = '\0';
+                    memcpy(custom_channels[custom_channel_count].secret, secret, 32);  /* Copy all 32 bytes (zero-padded) */
+                    custom_channel_count++;
+
+                    /* Save channels to NVS */
+                    channels_save_to_nvs();
+
+                    Serial.print("OK Joined channel: ");
+                    Serial.print(name);
+                    Serial.print(" (0x");
+                    Serial.print(String(hash, HEX));
+                    Serial.println(")");
+                }
+            }
+        }
+    } else if (cmd.startsWith("CHANNEL SEND ")) {
+        /* Send to channel: CHANNEL SEND <name> <text> */
+        String args = cmd.substring(13);
+        int space = args.indexOf(' ');
+        if (space < 0) {
+            Serial.println("ERR Usage: CHANNEL SEND <name> <text>");
+        } else {
+            String name = args.substring(0, space);
+            String text = args.substring(space + 1);
+
+            /* Find channel by name */
+            bool found = false;
+            if (name == "Public" || name == "public") {
+                send_group_message(text.c_str());
+                found = true;
+            } else {
+                for (int i = 0; i < custom_channel_count; i++) {
+                    if (custom_channels[i].valid && strcmp(custom_channels[i].name, name.c_str()) == 0) {
+                        send_channel_message(custom_channels[i].hash,
+                                             custom_channels[i].secret,
+                                             text.c_str(),
+                                             custom_channels[i].name);
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (found) {
+                Serial.println("OK Message sent");
+            } else {
+                Serial.println("ERR Channel not found. Use CHANNELS to list or CHANNEL JOIN to add.");
+            }
+        }
     } else if (cmd == "CONFIG SAVE") {
         config_save();
         Serial.println("OK Config saved to flash");
@@ -229,9 +474,40 @@ void handle_cli_command(const String &cmd) {
         Serial.println("OK Config cleared, rebooting...");
         delay(100);
         ESP.restart();
+    } else if (cmd == "IDENTITY ROTATE") {
+        /* Clear saved identity - will regenerate on next boot */
+        /* Also clear all encrypted data that depends on old keypair */
+
+        /* Clear messages (can't decrypt with new identity) */
+        public_msg_count = 0;
+        public_msg_index = 0;
+        direct_msg_count = 0;
+        direct_msg_index = 0;
+        for (int i = 0; i < MAX_CUSTOM_CHANNELS; i++) {
+            channel_msg_count[i] = 0;
+            channel_msg_index[i] = 0;
+        }
+
+        /* Clear saved neighbors (shared secrets will be invalid) */
+        prefs.begin("neighbors", false);
+        prefs.clear();
+        prefs.end();
+
+        /* Clear identity from NVS */
+        prefs.begin("meshgrid", false);
+        prefs.putBool("has_identity", false);
+        prefs.remove("pubkey");
+        prefs.remove("privkey");
+        prefs.end();
+
+        Serial.println("OK Identity rotated - all encrypted data cleared, rebooting...");
+        delay(100);
+        ESP.restart();
     } else if (cmd == "REBOOT") {
         Serial.println("OK Saving config and rebooting...");
         config_save();  /* Save everything before reboot */
+        neighbors_save_to_nvs();  /* Save neighbors and cached secrets */
+        channels_save_to_nvs();   /* Save custom channels */
         delay(100);
         ESP.restart();
     } else if (cmd == "ADVERT LOCAL") {
@@ -409,32 +685,50 @@ void handle_cli_command(const String &cmd) {
             Serial.println("ERR Message too long or empty");
         }
     } else if (cmd.startsWith("SEND ")) {
-        /* SEND <message> - broadcast text message */
-        /* SEND <dest> <message> - direct message to specific node */
+        /* SEND <message> - broadcast group message to public channel */
+        /* SEND <dest> <message> - encrypted direct message to specific node */
         String rest = cmd.substring(5);
         rest.trim();
 
-        /* Check if this is a direct message (has dest parameter) */
+        /* Try to parse as direct message: check if first word is a known neighbor */
         int spaceIdx = rest.indexOf(' ');
+        bool is_direct = false;
+        uint8_t dest_hash = 0;
+
         if (spaceIdx > 0 && spaceIdx < rest.length() - 1) {
-            /* Looks like: SEND <dest> <message> */
-            String dest = rest.substring(0, spaceIdx);
+            String maybe_dest = rest.substring(0, spaceIdx);
+
+            /* Check if it's a hex hash */
+            if (maybe_dest.startsWith("0x")) {
+                dest_hash = (uint8_t)strtol(maybe_dest.c_str() + 2, NULL, 16);
+                is_direct = true;
+            } else {
+                /* Check if it matches a neighbor name */
+                for (int i = 0; i < neighbor_count; i++) {
+                    if (strcmp(neighbors[i].name, maybe_dest.c_str()) == 0) {
+                        dest_hash = neighbors[i].hash;
+                        is_direct = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (is_direct) {
+            /* Direct message to specific neighbor */
             String message = rest.substring(spaceIdx + 1);
             message.trim();
 
-            /* For now, send as broadcast with destination prefix */
-            /* Format: "TO:<dest>:<message>" so receiver can filter */
-            String directMsg = "TO:" + dest + ":" + message;
-            if (directMsg.length() <= 200) {
-                send_text_message(directMsg.c_str());
+            if (message.length() > 0 && message.length() <= 150) {
+                send_text_message(dest_hash, message.c_str());
                 Serial.println("OK");
             } else {
                 Serial.println("ERR Message too long");
             }
         } else {
-            /* Broadcast message */
-            if (rest.length() > 0 && rest.length() <= 200) {
-                send_text_message(rest.c_str());
+            /* Broadcast to public channel (entire rest is the message) */
+            if (rest.length() > 0 && rest.length() <= 150) {
+                send_group_message(rest.c_str());
                 Serial.println("OK");
             } else {
                 Serial.println("ERR Message too long or empty");
@@ -442,23 +736,8 @@ void handle_cli_command(const String &cmd) {
         }
     } else if (cmd.startsWith("TRACE ")) {
         /* TRACE <target> - send trace packet to map route */
-        String target = cmd.substring(6);
-        target.trim();
-
-        if (target.length() > 0) {
-            /* For now, send a text message with TRACE prefix */
-            /* Format: "TRACE:<target>" */
-            String traceMsg = "TRACE:" + target;
-            send_text_message(traceMsg.c_str());
-
-            /* Basic response - full implementation would require protocol changes */
-            Serial.print("{\"path\":[\"");
-            Serial.print(mesh.name);
-            Serial.print("\"],\"hop_count\":0,\"rtt_ms\":0,\"status\":\"sent\"}");
-            Serial.println();
-        } else {
-            Serial.println("ERR Target required");
-        }
+        /* TODO: Implement proper PAYLOAD_TRACE */
+        Serial.println("ERR TRACE not implemented yet");
     } else {
         Serial.print("ERR Unknown command: ");
         Serial.println(cmd);
@@ -566,6 +845,12 @@ void handle_serial(void) {
             uint32_t epoch = days * 86400 + hour * 3600 + minute * 60 + second;
             rtc_time.epoch_at_boot = epoch - (millis() / 1000);
             rtc_time.valid = true;
+
+            /* Save RTC time to NVS for persistence across reboots */
+            prefs.begin("meshgrid", false);
+            prefs.putBool("rtc_valid", true);
+            prefs.putUInt("rtc_epoch", rtc_time.epoch_at_boot);
+            prefs.end();
 
             Serial.println("OK Time set");
         } else {

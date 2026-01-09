@@ -45,11 +45,14 @@ void log_event(const String &msg);
 /* Send advertisement packet */
 void send_advertisement(uint8_t route);
 
-/* Send text message */
-void send_text_message(const char *text);
+/* Send encrypted text message to specific peer */
+void send_text_message(uint8_t dest_hash, const char *text);
 
 /* Send encrypted group message */
 void send_group_message(const char *text);
+
+/* Send encrypted message to specific channel */
+void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name);
 
 /* Process received packet */
 void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr);

@@ -31,6 +31,7 @@ extern "C" {
 
 /* Application modules */
 #include "app/neighbors.h"
+#include "app/channels.h"
 #include "app/messaging.h"
 #include "app/config.h"
 #include "app/commands.h"
@@ -43,6 +44,18 @@ extern "C" {
 #define PUBLIC_CHANNEL_PSK "izOH6cXN6mrJ5e26oRXNcg=="
 uint8_t public_channel_secret[32];  /* Decoded PSK - defined here, used in config.cpp */
 uint8_t public_channel_hash = 0;     /* Hash of the public channel */
+
+/*
+ * Custom channels (stored in NVS)
+ */
+#define MAX_CUSTOM_CHANNELS 50  /* Support many chat groups */
+struct channel_entry {
+    bool valid;
+    uint8_t hash;
+    char name[17];
+    uint8_t secret[32];
+} custom_channels[MAX_CUSTOM_CHANNELS];
+int custom_channel_count = 0;
 
 /*
  * Configuration - set via serial commands or stored in flash
@@ -150,6 +163,37 @@ String log_buffer[LOG_BUFFER_SIZE];
 int log_index = 0;
 int log_count = 0;
 bool log_enabled = false;
+
+/*
+ * Message inbox buffers (tiered by channel type)
+ */
+#define PUBLIC_MESSAGE_BUFFER_SIZE 100   /* Public channel (most active) */
+#define CHANNEL_MESSAGE_BUFFER_SIZE 5    /* Per custom channel */
+#define DIRECT_MESSAGE_BUFFER_SIZE 50    /* All direct messages */
+
+struct message_entry {
+    bool valid;
+    bool decrypted;
+    uint8_t sender_hash;
+    char sender_name[17];
+    uint8_t channel_hash;  // 0 for direct message
+    uint32_t timestamp;
+    char text[128];
+};
+
+/* Separate buffers for different message types */
+struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
+int public_msg_index = 0;
+int public_msg_count = 0;
+
+struct message_entry direct_messages[DIRECT_MESSAGE_BUFFER_SIZE];
+int direct_msg_index = 0;
+int direct_msg_count = 0;
+
+/* Per-channel message buffers (50 channels × 5 messages each) */
+struct message_entry channel_messages[MAX_CUSTOM_CHANNELS][CHANNEL_MESSAGE_BUFFER_SIZE];
+int channel_msg_index[MAX_CUSTOM_CHANNELS] = {0};
+int channel_msg_count[MAX_CUSTOM_CHANNELS] = {0};
 
 // log_event() moved to app/messaging.cpp
 
@@ -612,12 +656,38 @@ static void identity_init(void) {
     /* Initialize crypto subsystem */
     crypto_init();
 
-    /* Generate proper Ed25519 keypair */
-    Serial.print("Generating Ed25519 keypair... ");
-    if (crypto_generate_keypair(mesh.pubkey, mesh.privkey) == 0) {
-        Serial.println("OK");
-    } else {
-        Serial.println("FAILED!");
+    /* Try to load identity from NVS first */
+    Preferences prefs;
+    prefs.begin("meshgrid", true);  // Read-only
+    bool has_identity = prefs.getBool("has_identity", false);
+
+    if (has_identity) {
+        /* Load saved keypair */
+        if (prefs.getBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE) == MESHGRID_PUBKEY_SIZE &&
+            prefs.getBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE) == MESHGRID_PRIVKEY_SIZE) {
+            Serial.println("Loaded identity from NVS");
+        } else {
+            has_identity = false;  // Load failed, regenerate
+        }
+    }
+    prefs.end();
+
+    if (!has_identity) {
+        /* Generate new Ed25519 keypair */
+        Serial.print("Generating Ed25519 keypair... ");
+        if (crypto_generate_keypair(mesh.pubkey, mesh.privkey) == 0) {
+            Serial.println("OK");
+
+            /* Save to NVS for persistence */
+            prefs.begin("meshgrid", false);  // Read-write
+            prefs.putBool("has_identity", true);
+            prefs.putBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE);
+            prefs.putBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE);
+            prefs.end();
+            Serial.println("Identity saved to NVS");
+        } else {
+            Serial.println("FAILED!");
+        }
     }
 
     /* Compute hash (MeshCore uses first byte of pubkey) */
@@ -661,7 +731,9 @@ void setup() {
     identity_init();
     init_public_channel();  // Initialize MeshCore public channel
     tx_queue_init();        // Initialize packet transmission queue
-    config_load();  // Load saved radio config from flash
+    config_load();          // Load saved radio config from flash
+    neighbors_load_from_nvs();  // Restore neighbors with cached secrets
+    channels_load_from_nvs();   // Restore custom channels
 
     Serial.print("Node: "); Serial.print(mesh.name);
     Serial.print(" ("); Serial.print(mesh.our_hash, HEX); Serial.println(")");

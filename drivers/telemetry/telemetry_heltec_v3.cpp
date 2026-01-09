@@ -92,4 +92,6 @@ static const struct telemetry_ops heltec_v3_telemetry_ops = {
 };
 
 /* Board selector will point to this */
+#if defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4)
 const struct telemetry_ops *board_telemetry_ops = &heltec_v3_telemetry_ops;
+#endif

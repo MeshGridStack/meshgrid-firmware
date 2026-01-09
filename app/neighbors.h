@@ -11,11 +11,11 @@ extern "C" {
 #include "net/protocol.h"
 }
 
-#define MAX_NEIGHBORS 32
+#define MAX_NEIGHBORS 512  /* Support large mesh networks (war mesh scenario) */
 
 /* Neighbor table */
 extern struct meshgrid_neighbor neighbors[MAX_NEIGHBORS];
-extern uint8_t neighbor_count;
+extern uint16_t neighbor_count;  /* uint16_t to support 512 neighbors */
 
 /* Find neighbor by hash */
 struct meshgrid_neighbor *neighbor_find(uint8_t hash);
@@ -33,5 +33,11 @@ enum meshgrid_node_type infer_node_type(const char *name);
 
 /* Infer firmware from name */
 enum meshgrid_firmware infer_firmware(const char *name);
+
+/* Save neighbors to NVS (up to 10 with valid secrets) */
+void neighbors_save_to_nvs(void);
+
+/* Load neighbors from NVS on boot */
+void neighbors_load_from_nvs(void);
 
 #endif /* MESHGRID_NEIGHBORS_H */
