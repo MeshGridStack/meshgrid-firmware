@@ -667,8 +667,6 @@ static int radio_init(void) {
     radio_spi->begin();
 #endif
 
-    Module *mod = new Module(pins->cs, pins->dio0, pins->reset, pins->dio1, *radio_spi);
-
     /* Build radio config from current settings */
     struct radio_config hal_config = {
         .frequency = radio_config.frequency,
@@ -682,8 +680,8 @@ static int radio_init(void) {
         .dio2_as_rf_switch = board->lora_defaults.dio2_as_rf_switch,
     };
 
-    /* Initialize radio via HAL - handles all chip types */
-    if (radio_hal_init(&radio_inst, mod, &hal_config, board->radio) != 0) {
+    /* Initialize radio via HAL - Module creation handled inside */
+    if (radio_hal_init(&radio_inst, pins, radio_spi, &hal_config, board->radio) != 0) {
         return -1;
     }
 

@@ -65,9 +65,14 @@ struct radio_instance {
 
 /**
  * Initialize radio based on board configuration
+ * Creates Module and radio object internally based on radio type
  * Returns: 0 on success, RadioLib error code on failure
  */
-int radio_hal_init(struct radio_instance *radio, Module *mod, const struct radio_config *config, enum radio_type type);
+int radio_hal_init(struct radio_instance *radio,
+                   const struct radio_pins *pins,
+                   SPIClass *spi,
+                   const struct radio_config *config,
+                   enum radio_type type);
 
 /**
  * Radio parameter setters - chip-agnostic wrappers

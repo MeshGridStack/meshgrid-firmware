@@ -8,14 +8,23 @@
 
 extern const struct board_config *board;
 
-int radio_hal_init(struct radio_instance *radio_inst, Module *mod, const struct radio_config *config, enum radio_type type) {
+int radio_hal_init(struct radio_instance *radio_inst,
+                   const struct radio_pins *pins,
+                   SPIClass *spi,
+                   const struct radio_config *config,
+                   enum radio_type type) {
     int state = RADIOLIB_ERR_UNKNOWN;
     radio_inst->type = type;
+
+    /* Create Module with correct DIO pin mapping for radio type */
+    Module *mod;
 
     /* Initialize based on radio chip type */
     switch (type) {
         case RADIO_SX1262:
         case RADIO_SX1268: {
+            /* SX126x: cs, dio1 (interrupt), reset, busy */
+            mod = new Module(pins->cs, pins->dio1, pins->reset, pins->busy, *spi);
             SX1262 *sx1262 = new SX1262(mod);
             radio_inst->sx1262 = sx1262;
 
@@ -63,6 +72,8 @@ int radio_hal_init(struct radio_instance *radio_inst, Module *mod, const struct 
 
         case RADIO_SX1276:
         case RADIO_SX1278: {
+            /* SX127x: cs, dio0 (interrupt), reset, dio1 */
+            mod = new Module(pins->cs, pins->dio0, pins->reset, pins->dio1, *spi);
             SX1276 *sx1276 = new SX1276(mod);
             radio_inst->sx1276 = sx1276;
 
