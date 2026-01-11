@@ -11,9 +11,15 @@
 #include <stdbool.h>
 
 // Forward declarations
-struct radio_ops;
-struct display_ops;
+struct power_ops;
 struct gps_ops;
+struct radio_ops;
+
+#ifdef __cplusplus
+class Adafruit_SSD1306;  /* For display access in board-specific code */
+/* Global hardware objects accessible to board code */
+extern class Adafruit_SSD1306 *display;
+#endif
 
 /**
  * Pin configuration for SPI-based radio (SX126x, SX127x)
@@ -116,6 +122,8 @@ struct lora_config {
     int8_t tx_power;        // dBm
     uint16_t preamble_len;
     bool use_crc;
+    float tcxo_voltage;     // TCXO reference voltage (0 = no TCXO)
+    bool dio2_as_rf_switch; // Use DIO2 as RF switch (common on SX1262)
 };
 
 /**
@@ -141,7 +149,12 @@ struct board_config {
     // LoRa defaults
     struct lora_config lora_defaults;
 
-    // Board-specific init/deinit
+    // Hardware abstraction layer (optional)
+    const struct radio_ops *radio_ops;  /* Radio chip driver (NULL = auto-detect from radio type) */
+    const struct power_ops *power_ops;  /* Power management (NULL = use simple GPIO) */
+    const struct gps_ops *gps_ops;      /* GPS driver (NULL = no GPS) */
+
+    // Board-specific init/deinit (legacy, prefer using *_ops)
     void (*early_init)(void);
     void (*late_init)(void);
 };

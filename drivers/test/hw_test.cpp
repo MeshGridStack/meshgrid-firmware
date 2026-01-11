@@ -4,13 +4,11 @@
 
 #include "hw_test.h"
 #include "../telemetry/telemetry.h"
+#include "../radio/radio_hal.h"
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <string.h>
 #include <stdio.h>
-
-/* External radio instance (from main.cpp) */
-extern SX1262 *radio;
 
 /* Test constants */
 #define BATTERY_SAMPLE_INTERVAL_MS  1000
@@ -160,7 +158,7 @@ int hw_test_radio(struct hw_test_result *result, hw_test_progress_cb progress)
 
     memset(result, 0, sizeof(*result));
 
-    if (!radio) {
+    if (!get_radio()) {
         if (progress) progress("Radio not initialized", 100);
         return -1;
     }
@@ -179,7 +177,7 @@ int hw_test_radio(struct hw_test_result *result, hw_test_progress_cb progress)
 
     /* Transmit test packets */
     for (int i = 0; i < RADIO_TEST_PACKETS; i++) {
-        int state = radio->transmit(test_packet, RADIO_TEST_PACKET_SIZE);
+        int state = get_radio()->transmit(test_packet, RADIO_TEST_PACKET_SIZE);
 
         if (state == RADIOLIB_ERR_NONE) {
             result->packets_sent++;
@@ -198,7 +196,7 @@ int hw_test_radio(struct hw_test_result *result, hw_test_progress_cb progress)
     result->passed = (result->packets_sent == RADIO_TEST_PACKETS);
 
     /* Read RSSI (if we received anything back) */
-    result->rssi_dbm = radio->getRSSI();
+    result->rssi_dbm = get_radio()->getRSSI();
 
     if (progress) {
         char status[32];

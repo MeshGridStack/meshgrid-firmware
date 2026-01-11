@@ -5,19 +5,14 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <mbedtls/base64.h>
+#include "config/memory.h"
+#include "lib/types.h"
 
 extern "C" {
 #include "drivers/crypto/crypto.h"
 }
 
-/* Externs from main.cpp */
-#define MAX_CUSTOM_CHANNELS 50
-struct channel_entry {
-    bool valid;
-    uint8_t hash;
-    char name[17];
-    uint8_t secret[32];
-};
+/* Externs from main.cpp - struct in lib/types.h */
 extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 extern int custom_channel_count;
 

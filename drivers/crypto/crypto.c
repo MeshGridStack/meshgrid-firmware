@@ -17,6 +17,9 @@
 #include <mbedtls/aes.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/md.h>
+
+/* Arduino functions we need */
+extern unsigned long millis(void);
 #elif defined(ARDUINO_ARCH_NRF52)
 #include <nrf_crypto.h>
 #else
@@ -207,4 +210,145 @@ int crypto_mac_then_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
 uint8_t crypto_hash_pubkey(const uint8_t *pubkey) {
     /* MeshCore uses first byte of pubkey as hash */
     return pubkey[0];
+}
+
+/* ========== Protocol v1 Implementation (Enhanced Security) ========== */
+
+void crypto_generate_nonce(uint8_t *nonce) {
+    /* Nonce: timestamp(4) + random(8) = 12 bytes total */
+    uint32_t timestamp = millis();
+    memcpy(nonce, &timestamp, 4);
+    crypto_random(nonce + 4, 8);
+}
+
+int crypto_encrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
+                      const uint8_t *shared_secret, const uint8_t *nonce) {
+#if defined(ARDUINO_ARCH_ESP32)
+    /* Format: nonce(12) + MAC(16) + ciphertext */
+
+    /* Copy nonce to output */
+    memcpy(dest, nonce, CRYPTO_V1_NONCE_SIZE);
+
+    /* Encrypt with AES-256-CTR */
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+
+    /* Use full 32-byte secret as AES-256 key */
+    int ret = mbedtls_aes_setkey_enc(&aes, shared_secret, 256);
+    if (ret != 0) {
+        mbedtls_aes_free(&aes);
+        return -1;
+    }
+
+    /* CTR mode state */
+    uint8_t stream_block[16];
+    size_t offset = 0;
+    uint8_t counter[16];
+
+    /* Initialize counter: nonce(12) + counter(4) */
+    memset(counter, 0, 16);
+    memcpy(counter, nonce, CRYPTO_V1_NONCE_SIZE);
+
+    /* Encrypt */
+    ret = mbedtls_aes_crypt_ctr(&aes, src_len, &offset, counter, stream_block,
+                                 src, dest + CRYPTO_V1_NONCE_SIZE + CRYPTO_V1_MAC_SIZE);
+    mbedtls_aes_free(&aes);
+
+    if (ret != 0) {
+        return -1;
+    }
+
+    /* Calculate HMAC-SHA256 over nonce + ciphertext */
+    uint8_t hmac[32];
+    mbedtls_md_context_t ctx;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1);
+    mbedtls_md_hmac_starts(&ctx, shared_secret, 32);
+    mbedtls_md_hmac_update(&ctx, dest, CRYPTO_V1_NONCE_SIZE);  /* nonce */
+    mbedtls_md_hmac_update(&ctx, dest + CRYPTO_V1_NONCE_SIZE + CRYPTO_V1_MAC_SIZE, src_len);  /* ciphertext */
+    mbedtls_md_hmac_finish(&ctx, hmac);
+    mbedtls_md_free(&ctx);
+
+    /* Store first 16 bytes of HMAC */
+    memcpy(dest + CRYPTO_V1_NONCE_SIZE, hmac, CRYPTO_V1_MAC_SIZE);
+
+    return CRYPTO_V1_NONCE_SIZE + CRYPTO_V1_MAC_SIZE + src_len;
+#else
+    /* Fallback for platforms without mbedtls */
+    memcpy(dest, src, src_len);
+    return src_len;
+#endif
+}
+
+int crypto_decrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
+                      const uint8_t *shared_secret) {
+#if defined(ARDUINO_ARCH_ESP32)
+    /* Minimum size: nonce(12) + MAC(16) + at least 1 byte ciphertext */
+    if (src_len < CRYPTO_V1_NONCE_SIZE + CRYPTO_V1_MAC_SIZE + 1) {
+        return 0;
+    }
+
+    /* Extract components */
+    const uint8_t *nonce = src;
+    const uint8_t *expected_mac = src + CRYPTO_V1_NONCE_SIZE;
+    const uint8_t *ciphertext = src + CRYPTO_V1_NONCE_SIZE + CRYPTO_V1_MAC_SIZE;
+    int ciphertext_len = src_len - CRYPTO_V1_NONCE_SIZE - CRYPTO_V1_MAC_SIZE;
+
+    /* Verify HMAC */
+    uint8_t hmac[32];
+    mbedtls_md_context_t ctx;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1);
+    mbedtls_md_hmac_starts(&ctx, shared_secret, 32);
+    mbedtls_md_hmac_update(&ctx, nonce, CRYPTO_V1_NONCE_SIZE);
+    mbedtls_md_hmac_update(&ctx, ciphertext, ciphertext_len);
+    mbedtls_md_hmac_finish(&ctx, hmac);
+    mbedtls_md_free(&ctx);
+
+    /* Constant-time compare first 16 bytes */
+    int mac_valid = 1;
+    for (int i = 0; i < CRYPTO_V1_MAC_SIZE; i++) {
+        if (hmac[i] != expected_mac[i]) {
+            mac_valid = 0;
+        }
+    }
+
+    if (!mac_valid) {
+        return 0;  /* MAC mismatch */
+    }
+
+    /* Decrypt with AES-256-CTR */
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+
+    int ret = mbedtls_aes_setkey_enc(&aes, shared_secret, 256);
+    if (ret != 0) {
+        mbedtls_aes_free(&aes);
+        return 0;
+    }
+
+    /* CTR mode state */
+    uint8_t stream_block[16];
+    size_t offset = 0;
+    uint8_t counter[16];
+
+    /* Initialize counter: nonce(12) + counter(4) */
+    memset(counter, 0, 16);
+    memcpy(counter, nonce, CRYPTO_V1_NONCE_SIZE);
+
+    /* Decrypt */
+    ret = mbedtls_aes_crypt_ctr(&aes, ciphertext_len, &offset, counter, stream_block,
+                                 ciphertext, dest);
+    mbedtls_aes_free(&aes);
+
+    if (ret != 0) {
+        return 0;
+    }
+
+    return ciphertext_len;
+#else
+    /* Fallback */
+    memcpy(dest, src, src_len);
+    return src_len;
+#endif
 }

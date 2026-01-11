@@ -1,0 +1,19 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+# meshgrid-firmware 8MB partition table with OTA support
+# Suitable for: T-Beam Supreme, T-Deck, T-Deck Pro, Station G2 (8MB variants)
+# Flash total: 8,388,608 bytes (0x800000)
+#
+# Layout:
+#   NVS:       20 KB  - Configuration storage
+#   OTA Data:   8 KB  - OTA metadata
+#   App0:       3 MB  - Active firmware
+#   App1:       3 MB  - Update firmware
+#   SPIFFS:  1.875 MB - File storage (logs, data, archives)
+#   Coredump:  64 KB  - Crash dumps
+
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xE000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x300000,
+app1,     app,  ota_1,   0x310000, 0x300000,
+spiffs,   data, spiffs,  0x610000, 0x1E0000,
+coredump, data, coredump,0x7F0000, 0x10000,

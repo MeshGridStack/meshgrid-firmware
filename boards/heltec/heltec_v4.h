@@ -11,6 +11,9 @@
 
 #ifdef BOARD_HELTEC_V4
 
+/* Heltec V4 power ops - implemented in drivers/power/power_heltec_v4.cpp */
+extern const struct power_ops heltec_v4_power_ops;
+
 static const struct board_config heltec_v4_config = {
     .name = "Heltec V4",
     .vendor = "Heltec",
@@ -33,7 +36,7 @@ static const struct board_config heltec_v4_config = {
     },
 
     .display_pins = {
-        .sda = 17,
+        .sda = 17,  /* V4 uses same I2C as V3 */
         .scl = 18,
         .reset = 21,
         .addr = 0x3C,
@@ -54,7 +57,7 @@ static const struct board_config heltec_v4_config = {
         .led = 35,
         .vbat_adc = 1,
         .button = 0,
-        .vext_active_low = true,
+        .vext_active_low = true,  /* V4 leaves VEXT inactive (LOW) - same as V3 */
     },
 
     .lora_defaults = {
@@ -65,7 +68,13 @@ static const struct board_config heltec_v4_config = {
         .tx_power = 22,
         .preamble_len = 8,
         .use_crc = true,
+        .tcxo_voltage = 1.8,        // Heltec V4 has TCXO
+        .dio2_as_rf_switch = true,  // Uses DIO2 for RF switching
     },
+
+    .radio_ops = NULL,  /* Auto-detect from radio type */
+    .power_ops = &heltec_v4_power_ops,
+    .gps_ops = NULL,
 
     .early_init = NULL,
     .late_init = NULL,

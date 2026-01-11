@@ -193,6 +193,10 @@ struct meshgrid_neighbor {
     uint8_t hops;                      /* Hop count when first seen */
     uint8_t shared_secret[32];         /* Cached ECDH shared secret */
     bool secret_valid;                 /* True if shared_secret is cached */
+
+    /* Protocol v1 state (for meshgrid-to-meshgrid communication) */
+    uint32_t last_seq_rx;              /* Last received sequence number */
+    uint32_t next_seq_tx;              /* Next sequence number to send */
 };
 
 /*

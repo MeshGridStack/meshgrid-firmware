@@ -1,0 +1,19 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+# meshgrid-firmware 16MB partition table with OTA support
+# Suitable for: Heltec V4, large memory boards
+# Flash total: 16,777,216 bytes (0x1000000)
+#
+# Layout:
+#   NVS:       20 KB  - Configuration storage
+#   OTA Data:   8 KB  - OTA metadata
+#   App0:       5 MB  - Active firmware
+#   App1:       5 MB  - Update firmware
+#   SPIFFS:     6 MB  - File storage (extensive archives, firmware cache)
+#   Coredump:  64 KB  - Crash dumps
+
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xE000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x500000,
+app1,     app,  ota_1,   0x510000, 0x500000,
+spiffs,   data, spiffs,  0xA10000, 0x5E0000,
+coredump, data, coredump,0xFF0000, 0x10000,

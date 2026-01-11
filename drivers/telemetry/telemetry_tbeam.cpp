@@ -49,7 +49,7 @@ static uint16_t axp_read_reg16(uint8_t reg_h, uint8_t reg_l)
 
 static int tbeam_init(void)
 {
-    Wire.begin(I2C_SDA, I2C_SCL);
+    /* Wire.begin() already called in main.cpp setup() */
 
     /* Detect AXP192/AXP2101 */
     Wire.beginTransmission(AXP192_ADDR);
@@ -132,6 +132,6 @@ static const struct telemetry_ops tbeam_telemetry_ops = {
 };
 
 /* Board selector will point to this for T-Beam */
-#if defined(BOARD_TBEAM) || defined(BOARD_TBEAM_S3)
+#if defined(BOARD_LILYGO_TBEAM) || defined(BOARD_LILYGO_TBEAM_SUPREME)
 const struct telemetry_ops *board_telemetry_ops = &tbeam_telemetry_ops;
 #endif

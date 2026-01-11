@@ -20,14 +20,14 @@ static const struct board_config lilygo_t3s3_config = {
     .gps = GPS_NONE,
 
     .radio_pins = {
-        .mosi = 11,
-        .miso = 13,
-        .sck = 12,
-        .cs = 10,
-        .reset = 5,
-        .busy = 4,
+        .mosi = 6,
+        .miso = 3,
+        .sck = 5,
+        .cs = 7,
+        .reset = 8,
+        .busy = 34,
         .dio0 = -1,
-        .dio1 = 1,
+        .dio1 = 33,
         .rxen = -1,
         .txen = -1,
     },
@@ -35,7 +35,7 @@ static const struct board_config lilygo_t3s3_config = {
     .display_pins = {
         .sda = 18,
         .scl = 17,
-        .reset = -1,
+        .reset = 21,
         .addr = 0x3C,
         .width = 128,
         .height = 64,
@@ -51,8 +51,8 @@ static const struct board_config lilygo_t3s3_config = {
 
     .power_pins = {
         .vext = -1,
-        .led = -1,
-        .vbat_adc = -1,
+        .led = 37,
+        .vbat_adc = 1,
         .button = 0,
         .vext_active_low = false,
     },
@@ -65,7 +65,13 @@ static const struct board_config lilygo_t3s3_config = {
         .tx_power = 22,
         .preamble_len = 8,
         .use_crc = true,
+        .tcxo_voltage = 1.8,        // T3S3 has TCXO
+        .dio2_as_rf_switch = true,  // Uses DIO2 for RF switching
     },
+
+    .radio_ops = NULL,  /* Auto-detect from radio type */
+    .power_ops = NULL,  /* Use simple GPIO power (fallback) */
+    .gps_ops = NULL,
 
     .early_init = NULL,
     .late_init = NULL,

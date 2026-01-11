@@ -70,7 +70,13 @@ static const struct board_config heltec_v3_config = {
         .tx_power = 22,
         .preamble_len = 8,
         .use_crc = true,
+        .tcxo_voltage = 1.8,        // Heltec V3 has TCXO
+        .dio2_as_rf_switch = true,  // Uses DIO2 for RF switching
     },
+
+    .radio_ops = NULL,  /* Auto-detect from radio type */
+    .power_ops = NULL,  /* Use simple GPIO power (fallback in power.c) */
+    .gps_ops = NULL,
 
     .early_init = heltec_v3_early_init,
     .late_init = NULL,

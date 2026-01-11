@@ -6,12 +6,11 @@
 #define MESHGRID_NEIGHBORS_H
 
 #include <stdint.h>
+#include "config/memory.h"
 
 extern "C" {
 #include "net/protocol.h"
 }
-
-#define MAX_NEIGHBORS 512  /* Support large mesh networks (war mesh scenario) */
 
 /* Neighbor table */
 extern struct meshgrid_neighbor neighbors[MAX_NEIGHBORS];

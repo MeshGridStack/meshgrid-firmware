@@ -4,6 +4,10 @@
 
 #include "commands.h"
 #include "neighbors.h"
+#include "config/memory.h"
+#include "config/constants.h"
+#include "lib/types.h"
+#include "drivers/radio/radio_hal.h"
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <Preferences.h>
@@ -33,41 +37,16 @@ extern struct radio_config_t {
 } radio_config;
 
 extern const struct board_config *board;
-extern class SX1262 *radio;
 extern struct telemetry_data telemetry;
 extern Preferences prefs;
 
-/* RTC time tracking */
-struct rtc_time_t {
-    bool valid;
-    uint32_t epoch_at_boot;
-};
+/* Externs from main.cpp - structs defined in lib/types.h */
 extern struct rtc_time_t rtc_time;
-
-#define LOG_BUFFER_SIZE 50
 extern String log_buffer[LOG_BUFFER_SIZE];
 extern int log_index, log_count;
 extern bool log_enabled, monitor_mode, display_dirty;
 extern uint32_t stat_duplicates;
 extern uint32_t stat_clients, stat_repeaters, stat_rooms;
-
-/* Custom channels */
-#define MAX_CUSTOM_CHANNELS 50
-
-/* Message inbox buffers (tiered) */
-#define PUBLIC_MESSAGE_BUFFER_SIZE 100
-#define CHANNEL_MESSAGE_BUFFER_SIZE 5
-#define DIRECT_MESSAGE_BUFFER_SIZE 50
-
-struct message_entry {
-    bool valid;
-    bool decrypted;
-    uint8_t sender_hash;
-    char sender_name[17];
-    uint8_t channel_hash;
-    uint32_t timestamp;
-    char text[128];
-};
 
 extern struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
 extern int public_msg_index, public_msg_count;
@@ -80,12 +59,6 @@ extern int channel_msg_index[MAX_CUSTOM_CHANNELS];
 extern int channel_msg_count[MAX_CUSTOM_CHANNELS];
 
 extern uint8_t public_channel_hash;
-struct channel_entry {
-    bool valid;
-    uint8_t hash;
-    char name[17];
-    uint8_t secret[32];
-};
 extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 extern int custom_channel_count;
 
@@ -156,7 +129,14 @@ void handle_cli_command(const String &cmd) {
             Serial.print(neighbors[i].snr);
             Serial.print(",\"last_seen_secs\":");
             Serial.print((millis() - neighbors[i].last_seen) / 1000);
-            Serial.print("}");
+            Serial.print(",\"firmware\":\"");
+            switch (neighbors[i].firmware) {
+                case FW_MESHGRID: Serial.print("meshgrid"); break;
+                case FW_MESHCORE: Serial.print("legacy"); break;
+                case FW_MESHTASTIC: Serial.print("meshtastic"); break;
+                default: Serial.print("unknown"); break;
+            }
+            Serial.print("\"}");
         }
         Serial.println("]");
     } else if (cmd == "TELEMETRY") {
@@ -552,7 +532,7 @@ void handle_cli_command(const String &cmd) {
     } else if (cmd.startsWith("SET FREQ ")) {
         float freq = cmd.substring(9).toFloat();
         if (freq >= 137.0 && freq <= 1020.0) {
-            radio->setFrequency(freq);
+            radio_set_frequency(freq);
             radio_config.frequency = freq;
             config_save();
             Serial.println("OK");
@@ -561,7 +541,7 @@ void handle_cli_command(const String &cmd) {
         }
     } else if (cmd.startsWith("SET BW ")) {
         float bw = cmd.substring(7).toFloat();
-        if (radio->setBandwidth(bw) == RADIOLIB_ERR_NONE) {
+        if (radio_set_bandwidth(bw) == RADIOLIB_ERR_NONE) {
             radio_config.bandwidth = bw;
             config_save();
             Serial.println("OK");
@@ -571,7 +551,7 @@ void handle_cli_command(const String &cmd) {
     } else if (cmd.startsWith("SET SF ")) {
         int sf = cmd.substring(7).toInt();
         if (sf >= 6 && sf <= 12) {
-            if (radio->setSpreadingFactor(sf) == RADIOLIB_ERR_NONE) {
+            if (radio_set_spreading_factor(sf) == RADIOLIB_ERR_NONE) {
                 radio_config.spreading_factor = sf;
                 config_save();
                 Serial.println("OK");
@@ -584,7 +564,7 @@ void handle_cli_command(const String &cmd) {
     } else if (cmd.startsWith("SET CR ")) {
         int cr = cmd.substring(7).toInt();
         if (cr >= 5 && cr <= 8) {
-            if (radio->setCodingRate(cr) == RADIOLIB_ERR_NONE) {
+            if (radio_set_coding_rate(cr) == RADIOLIB_ERR_NONE) {
                 radio_config.coding_rate = cr;
                 config_save();
                 Serial.println("OK");
@@ -597,7 +577,7 @@ void handle_cli_command(const String &cmd) {
     } else if (cmd.startsWith("SET POWER ")) {
         int power = cmd.substring(10).toInt();
         if (power >= -9 && power <= 22) {
-            if (radio->setOutputPower(power) == RADIOLIB_ERR_NONE) {
+            if (radio_set_output_power(power) == RADIOLIB_ERR_NONE) {
                 radio_config.tx_power = power;
                 config_save();
                 Serial.println("OK");
@@ -610,7 +590,7 @@ void handle_cli_command(const String &cmd) {
     } else if (cmd.startsWith("SET PREAMBLE ")) {
         int preamble = cmd.substring(13).toInt();
         if (preamble >= 6 && preamble <= 65535) {
-            if (radio->setPreambleLength(preamble) == RADIOLIB_ERR_NONE) {
+            if (radio_set_preamble_length(preamble) == RADIOLIB_ERR_NONE) {
                 radio_config.preamble_len = preamble;
                 config_save();
                 Serial.println("OK");
@@ -622,11 +602,11 @@ void handle_cli_command(const String &cmd) {
         }
     } else if (cmd == "SET PRESET EU_NARROW" || cmd == "SET PRESET EU") {
         /* EU/UK (Narrow) - 869.618 MHz, 62.5 kHz BW, SF8, CR8, Preamble 16 */
-        radio->setFrequency(869.618);
-        radio->setBandwidth(62.5);
-        radio->setSpreadingFactor(8);
-        radio->setCodingRate(8);
-        radio->setPreambleLength(16);  /* MeshCore uses 16 */
+        radio_set_frequency(869.618);
+        radio_set_bandwidth(62.5);
+        radio_set_spreading_factor(8);
+        radio_set_coding_rate(8);
+        radio_set_preamble_length(16);  /* MeshCore uses 16 */
         radio_config.frequency = 869.618;
         radio_config.bandwidth = 62.5;
         radio_config.spreading_factor = 8;
@@ -636,11 +616,11 @@ void handle_cli_command(const String &cmd) {
         Serial.println("OK EU/UK Narrow: 869.618MHz 62.5kHz SF8 CR8 Pre16");
     } else if (cmd == "SET PRESET US_STANDARD" || cmd == "SET PRESET US") {
         /* US Standard - 915 MHz, 250 kHz BW, SF10, CR7 */
-        radio->setFrequency(915.0);
-        radio->setBandwidth(250.0);
-        radio->setSpreadingFactor(10);
-        radio->setCodingRate(7);
-        radio->setPreambleLength(16);
+        radio_set_frequency(915.0);
+        radio_set_bandwidth(250.0);
+        radio_set_spreading_factor(10);
+        radio_set_coding_rate(7);
+        radio_set_preamble_length(16);
         radio_config.frequency = 915.0;
         radio_config.bandwidth = 250.0;
         radio_config.spreading_factor = 10;
@@ -650,11 +630,11 @@ void handle_cli_command(const String &cmd) {
         Serial.println("OK US Standard: 915MHz 250kHz SF10 CR7");
     } else if (cmd == "SET PRESET US_FAST") {
         /* US Fast - 915 MHz, 500 kHz BW, SF7, CR5 */
-        radio->setFrequency(915.0);
-        radio->setBandwidth(500.0);
-        radio->setSpreadingFactor(7);
-        radio->setCodingRate(5);
-        radio->setPreambleLength(8);
+        radio_set_frequency(915.0);
+        radio_set_bandwidth(500.0);
+        radio_set_spreading_factor(7);
+        radio_set_coding_rate(5);
+        radio_set_preamble_length(8);
         radio_config.frequency = 915.0;
         radio_config.bandwidth = 500.0;
         radio_config.spreading_factor = 7;
@@ -664,10 +644,10 @@ void handle_cli_command(const String &cmd) {
         Serial.println("OK US Fast: 915MHz 500kHz SF7 CR5");
     } else if (cmd == "SET PRESET LONG_RANGE") {
         /* Long range - SF12, 125 kHz BW */
-        radio->setBandwidth(125.0);
-        radio->setSpreadingFactor(12);
-        radio->setCodingRate(8);
-        radio->setPreambleLength(16);
+        radio_set_bandwidth(125.0);
+        radio_set_spreading_factor(12);
+        radio_set_coding_rate(8);
+        radio_set_preamble_length(16);
         radio_config.bandwidth = 125.0;
         radio_config.spreading_factor = 12;
         radio_config.coding_rate = 8;

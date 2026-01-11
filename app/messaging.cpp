@@ -4,6 +4,9 @@
 
 #include "messaging.h"
 #include "neighbors.h"
+#include "config/memory.h"
+#include "lib/types.h"
+#include "drivers/radio/radio_hal.h"
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <mbedtls/sha256.h>
@@ -12,47 +15,18 @@ extern "C" {
 #include "drivers/crypto/crypto.h"
 }
 
-/* Externs from main.cpp */
+/* Externs from main.cpp - structs defined in lib/types.h */
 extern struct meshgrid_state mesh;
-extern class SX1262 *radio;
 extern uint32_t boot_time;
 
-/* RTC time tracking */
-struct rtc_time_t {
-    bool valid;
-    uint32_t epoch_at_boot;
-};
+/* Radio accessor - use get_radio() for PhysicalLayer* */
 extern struct rtc_time_t rtc_time;
 extern bool display_dirty, monitor_mode, log_enabled;
 extern uint32_t last_activity_time;
 extern enum meshgrid_device_mode device_mode;
 
-/* Custom channels */
-#define MAX_CUSTOM_CHANNELS 50
-struct channel_entry {
-    bool valid;
-    uint8_t hash;
-    char name[17];
-    uint8_t secret[32];
-};
 extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 extern int custom_channel_count;
-
-/* Message inbox buffers (tiered) */
-#define PUBLIC_MESSAGE_BUFFER_SIZE 100
-#define CHANNEL_MESSAGE_BUFFER_SIZE 5
-#define DIRECT_MESSAGE_BUFFER_SIZE 50
-#define MAX_CUSTOM_CHANNELS 50
-
-struct message_entry {
-    bool valid;
-    bool decrypted;
-    uint8_t sender_hash;
-    char sender_name[17];
-    uint8_t channel_hash;
-    uint32_t timestamp;
-    char text[128];
-};
 
 extern struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
 extern int public_msg_index, public_msg_count;
@@ -66,16 +40,9 @@ extern int channel_msg_count[MAX_CUSTOM_CHANNELS];
 
 extern String log_buffer[];
 extern int log_index, log_count;
-#define LOG_BUFFER_SIZE 50
 
-/* Seen table */
-struct seen_entry {
-    uint8_t hash;
-    uint32_t time;
-};
 extern struct seen_entry seen_table[];
 extern uint8_t seen_idx;
-#define SEEN_TABLE_SIZE 32
 
 extern uint32_t stat_duplicates, stat_flood_fwd, stat_flood_rx;
 extern uint8_t public_channel_secret[32];
@@ -231,8 +198,8 @@ void tx_queue_process(void) {
     }
 
     /* Transmit (collision avoidance via queue + random delays) */
-    radio->transmit(tx_queue[best_idx].buf, tx_queue[best_idx].len);
-    radio->startReceive();
+    get_radio()->transmit(tx_queue[best_idx].buf, tx_queue[best_idx].len);
+    get_radio()->startReceive();
 
     /* Update statistics */
     airtime_record_tx(tx_duration);
@@ -523,8 +490,8 @@ void handle_text_msg(struct meshgrid_packet *pkt, int16_t rssi) {
                 uint8_t tx_buf[MESHGRID_MAX_PACKET_SIZE];
                 int tx_len = meshgrid_packet_encode(&ack_pkt, tx_buf, sizeof(tx_buf));
                 if (tx_len > 0) {
-                    radio->transmit(tx_buf, tx_len);
-                    radio->startReceive();
+                    get_radio()->transmit(tx_buf, tx_len);
+                    get_radio()->startReceive();
                     mesh.packets_tx++;
 
                     /* Debug: show ACK hash */
@@ -881,8 +848,8 @@ void send_advertisement(uint8_t route_type) {
         Serial.print(pkt.payload_len);
         Serial.print(" sig_valid=");
         Serial.println(sig_valid ? "YES" : "NO");
-        radio->transmit(tx_buf, tx_len);
-        radio->startReceive();
+        get_radio()->transmit(tx_buf, tx_len);
+        get_radio()->startReceive();
         mesh.packets_tx++;
         led_blink();
 
@@ -981,8 +948,8 @@ void send_text_message(uint8_t dest_hash, const char *text) {
         }
         Serial.println();
 
-        radio->transmit(tx_buf, tx_len);
-        radio->startReceive();
+        get_radio()->transmit(tx_buf, tx_len);
+        get_radio()->startReceive();
         mesh.packets_tx++;
         led_blink();
 
@@ -1083,8 +1050,8 @@ void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret, c
         }
         Serial.println();
 
-        radio->transmit(tx_buf, tx_len);
-        radio->startReceive();
+        get_radio()->transmit(tx_buf, tx_len);
+        get_radio()->startReceive();
         mesh.packets_tx++;
         led_blink();
         String log_msg = "TX GRP [";

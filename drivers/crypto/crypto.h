@@ -150,6 +150,41 @@ void crypto_random(uint8_t *dest, size_t len);
  */
 uint8_t crypto_hash_pubkey(const uint8_t *pubkey);
 
+/* ========== Protocol v1 (Enhanced Security) ========== */
+
+#define CRYPTO_V1_MAC_SIZE      16   /* Full 16-byte HMAC */
+#define CRYPTO_V1_NONCE_SIZE    12   /* 96-bit nonce for CTR mode */
+
+/**
+ * Encrypt with AES-256-CTR + 16-byte HMAC (Protocol v1)
+ * @param dest Output: nonce(12) + MAC(16) + ciphertext
+ * @param src Plaintext
+ * @param src_len Length of plaintext
+ * @param shared_secret 32-byte shared secret (full key)
+ * @param nonce 12-byte nonce (must be unique per message)
+ * @return Total length (28 + ciphertext length), or -1 on error
+ */
+int crypto_encrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
+                      const uint8_t *shared_secret, const uint8_t *nonce);
+
+/**
+ * Verify HMAC and decrypt with AES-256-CTR (Protocol v1)
+ * @param dest Output plaintext
+ * @param src nonce(12) + MAC(16) + ciphertext
+ * @param src_len Total length
+ * @param shared_secret 32-byte shared secret (full key)
+ * @return Plaintext length, or 0 if MAC invalid
+ */
+int crypto_decrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
+                      const uint8_t *shared_secret);
+
+/**
+ * Generate a unique nonce for v1 encryption
+ * Format: timestamp(4) + random(8)
+ * @param nonce Output: 12-byte nonce
+ */
+void crypto_generate_nonce(uint8_t *nonce);
+
 #ifdef __cplusplus
 }
 #endif

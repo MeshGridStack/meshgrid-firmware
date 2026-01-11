@@ -11,13 +11,19 @@
 
 #include <Arduino.h>
 #include <RadioLib.h>
-#include <U8g2lib.h>
+#include <Adafruit_GFX.h>
+#define SSD1306_NO_SPLASH
+#include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Preferences.h>
 #include <mbedtls/base64.h>
 
+#include "config/constants.h"
+#include "config/memory.h"
+#include "lib/types.h"
 #include "lib/board.h"
+#include "lib/ui_lib.h"
 #include "version.h"
 
 extern "C" {
@@ -25,8 +31,10 @@ extern "C" {
 #include "drivers/telemetry/telemetry.h"
 #include "drivers/test/hw_test.h"
 #include "drivers/crypto/crypto.h"
+#include "drivers/power/power.h"
 }
 
+#include "drivers/radio/radio_hal.h"
 #include "boards/boards.h"
 
 /* Application modules */
@@ -38,23 +46,16 @@ extern "C" {
 
 /*
  * MeshCore Public Channel (for group messaging support)
- * PSK: Base64-encoded pre-shared key for the default "Public" group channel
- * Compatible with MeshCore's standard public channel
+ * PSK defined in config/config.h
  */
-#define PUBLIC_CHANNEL_PSK "izOH6cXN6mrJ5e26oRXNcg=="
 uint8_t public_channel_secret[32];  /* Decoded PSK - defined here, used in config.cpp */
 uint8_t public_channel_hash = 0;     /* Hash of the public channel */
 
 /*
  * Custom channels (stored in NVS)
+ * Limit defined in config/memory.h, struct in lib/types.h
  */
-#define MAX_CUSTOM_CHANNELS 50  /* Support many chat groups */
-struct channel_entry {
-    bool valid;
-    uint8_t hash;
-    char name[17];
-    uint8_t secret[32];
-} custom_channels[MAX_CUSTOM_CHANNELS];
+struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 int custom_channel_count = 0;
 
 /*
@@ -66,9 +67,19 @@ enum meshgrid_device_mode device_mode = MODE_CLIENT;
  * Board and hardware
  */
 const struct board_config *board;
-SX1262 *radio = nullptr;  /* Non-static for hw_test access */
+
+/* Radio instance - holds the actual radio object (exported for radio_api.cpp) */
+struct radio_instance radio_inst = {RADIO_NONE, {nullptr}};
+
+/* Radio accessor */
+static inline PhysicalLayer* radio() { return radio_inst.as_phy(); }
+
 static SPIClass *radio_spi = nullptr;
-static U8G2 *display = nullptr;
+
+/* Create display as global object BEFORE Wire.begin() - like MeshCore does
+ * Use -1 for reset pin to avoid crashes, handle reset manually in display_init() */
+static Adafruit_SSD1306 display_128x64(128, 64, &Wire, -1);
+Adafruit_SSD1306 *display = nullptr;  /* Will point to display_128x64 after board detection */
 
 /*
  * Mesh state
@@ -78,11 +89,8 @@ uint32_t boot_time;
 
 /*
  * RTC time tracking (set via /time command)
+ * Struct defined in lib/types.h
  */
-struct rtc_time_t {
-    bool valid;
-    uint32_t epoch_at_boot;  /* Unix timestamp when device booted */
-};
 struct rtc_time_t rtc_time = {false, 0};
 
 /*
@@ -101,12 +109,9 @@ struct radio_config_t {
 
 /*
  * Seen packets table (for deduplication)
+ * Size in config/memory.h, struct in lib/types.h
  */
-#define SEEN_TABLE_SIZE 64
-struct seen_entry {
-    uint8_t hash;
-    uint32_t time;
-} seen_table[SEEN_TABLE_SIZE];
+struct seen_entry seen_table[SEEN_TABLE_SIZE];
 uint8_t seen_idx = 0;
 
 /*
@@ -120,15 +125,17 @@ uint8_t seen_idx = 0;
 enum display_screen {
     SCREEN_STATUS = 0,      /* Main status overview */
     SCREEN_NEIGHBORS = 1,   /* Neighbor list */
-    SCREEN_STATS = 2,       /* Detailed statistics */
-    SCREEN_INFO = 3,        /* Device info */
-    SCREEN_RADIO = 4,       /* Radio configuration */
-    SCREEN_COUNT = 5
+    SCREEN_MESSAGES = 2,    /* Message inbox */
+    SCREEN_STATS = 3,       /* Detailed statistics */
+    SCREEN_INFO = 4,        /* Device info */
+    SCREEN_RADIO = 5,       /* Radio configuration */
+    SCREEN_COUNT = 6
 };
 
 static enum display_screen current_screen = SCREEN_STATUS;
 bool display_dirty = true;
 static uint8_t neighbor_scroll = 0;  /* Scroll offset for neighbor list */
+static uint8_t message_scroll = 0;   /* Scroll offset for message list */
 uint32_t last_activity_time = 0;
 
 /*
@@ -137,8 +144,7 @@ uint32_t last_activity_time = 0;
 static bool button_pressed = false;
 static uint32_t button_press_time = 0;
 static uint32_t last_button_check = 0;
-#define BUTTON_DEBOUNCE_MS 50
-#define BUTTON_LONG_PRESS_MS 1000
+/* Button timing defined in config/config.h */
 
 /*
  * Statistics
@@ -158,7 +164,7 @@ bool monitor_mode = false;
 /*
  * Event log buffer (circular)
  */
-#define LOG_BUFFER_SIZE 50
+/* LOG_BUFFER_SIZE defined in config/memory.h */
 String log_buffer[LOG_BUFFER_SIZE];
 int log_index = 0;
 int log_count = 0;
@@ -166,20 +172,8 @@ bool log_enabled = false;
 
 /*
  * Message inbox buffers (tiered by channel type)
+ * Sizes in config/memory.h, struct in lib/types.h
  */
-#define PUBLIC_MESSAGE_BUFFER_SIZE 100   /* Public channel (most active) */
-#define CHANNEL_MESSAGE_BUFFER_SIZE 5    /* Per custom channel */
-#define DIRECT_MESSAGE_BUFFER_SIZE 50    /* All direct messages */
-
-struct message_entry {
-    bool valid;
-    bool decrypted;
-    uint8_t sender_hash;
-    char sender_name[17];
-    uint8_t channel_hash;  // 0 for direct message
-    uint32_t timestamp;
-    char text[128];
-};
 
 /* Separate buffers for different message types */
 struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
@@ -202,7 +196,7 @@ int channel_msg_count[MAX_CUSTOM_CHANNELS] = {0};
  */
 struct telemetry_data telemetry;
 static uint32_t last_telemetry_read = 0;
-#define TELEMETRY_READ_INTERVAL_MS 5000
+/* Telemetry interval defined in config/config.h */
 
 /* ========================================================================= */
 /* Utility functions                                                         */
@@ -214,6 +208,8 @@ void led_blink(void) {
     delay(30);
     digitalWrite(board->power_pins.led, LOW);
 }
+
+/* Radio accessor helpers - implemented in drivers/radio/radio_api.cpp */
 
 /* ========================================================================= */
 /* Button handling                                                           */
@@ -242,10 +238,14 @@ static void button_check(void) {
         button_pressed = false;
 
         if (press_duration >= BUTTON_LONG_PRESS_MS) {
-            /* Long press: toggle through screens backwards or special action */
+            /* Long press: scroll up or special action */
             if (current_screen == SCREEN_NEIGHBORS && neighbor_count > 4) {
                 /* On neighbor screen: scroll up */
                 if (neighbor_scroll > 0) neighbor_scroll--;
+            } else if (current_screen == SCREEN_MESSAGES) {
+                /* On message screen: scroll up */
+                int total = public_msg_count + direct_msg_count;
+                if (total > 4 && message_scroll > 0) message_scroll--;
             } else {
                 /* Send local advertisement on button press */
                 send_advertisement(ROUTE_DIRECT);
@@ -261,9 +261,19 @@ static void button_check(void) {
                     neighbor_scroll = 0;
                     current_screen = (enum display_screen)((current_screen + 1) % SCREEN_COUNT);
                 }
+            } else if (current_screen == SCREEN_MESSAGES) {
+                /* On message screen: scroll down or next screen */
+                int total = public_msg_count + direct_msg_count;
+                if (total > 4 && message_scroll < total - 4) {
+                    message_scroll++;
+                } else {
+                    message_scroll = 0;
+                    current_screen = (enum display_screen)((current_screen + 1) % SCREEN_COUNT);
+                }
             } else {
                 current_screen = (enum display_screen)((current_screen + 1) % SCREEN_COUNT);
                 neighbor_scroll = 0;
+                message_scroll = 0;
             }
         }
         display_dirty = true;
@@ -294,21 +304,8 @@ static const char* node_type_char(enum meshgrid_node_type t) {
 }
 
 static void draw_header(const char *title) {
-    char line[32];
-    display->setFont(u8g2_font_6x10_tf);
-
-    /* Header bar */
-    display->drawBox(0, 0, 128, 11);
-    display->setDrawColor(0);
-    snprintf(line, sizeof(line), " %s ", title);
-    display->drawStr(0, 9, line);
-
-    /* Battery indicator on right */
-    if (telemetry.battery_mv > 0) {
-        snprintf(line, sizeof(line), "%d%%", telemetry.battery_pct);
-        display->drawStr(100, 9, line);
-    }
-    display->setDrawColor(1);
+    int battery = (telemetry.battery_mv > 0) ? telemetry.battery_pct : -1;
+    ui_draw_header(display, title, battery);
 }
 
 static void draw_screen_status(void) {
@@ -316,35 +313,34 @@ static void draw_screen_status(void) {
 
     draw_header("STATUS");
 
-    /* Line 2: Our identity */
+    /* Device identity */
     const char *mode_str = (device_mode == MODE_REPEATER) ? "RPT" :
                            (device_mode == MODE_ROOM) ? "ROOM" : "CLI";
     snprintf(line, sizeof(line), "%s %02X %s", mode_str, mesh.our_hash, mesh.name);
-    display->drawStr(0, 22, line);
+    display->setCursor(0, UI_CONTENT_TOP + 2); display->print(line);
 
-    /* Line 3: Network summary with icons */
-    snprintf(line, sizeof(line), "C:%lu R:%lu S:%lu", stat_clients, stat_repeaters, stat_rooms);
-    display->drawStr(0, 33, line);
+    /* Network summary */
+    snprintf(line, sizeof(line), "Net: C:%lu R:%lu S:%lu", stat_clients, stat_repeaters, stat_rooms);
+    display->setCursor(0, UI_CONTENT_TOP + 14); display->print(line);
 
-    /* Line 4: Traffic stats */
-    snprintf(line, sizeof(line), "RX:%lu TX:%lu FWD:%lu",
+    /* Traffic stats */
+    snprintf(line, sizeof(line), "RX:%lu TX:%lu FW:%lu",
              stat_flood_rx, mesh.packets_tx, stat_flood_fwd);
-    display->drawStr(0, 44, line);
+    display->setCursor(0, UI_CONTENT_TOP + 26); display->print(line);
 
-    /* Line 5: Uptime */
+    /* Uptime and temperature */
     uint32_t up = get_uptime_secs();
     if (telemetry.has_temp) {
-        snprintf(line, sizeof(line), "Up %luh%02lum  %d.%dC",
+        snprintf(line, sizeof(line), "Up %luh%lum %d.%dC",
                  up / 3600, (up % 3600) / 60,
                  telemetry.temp_deci_c / 10, abs(telemetry.temp_deci_c % 10));
     } else {
-        snprintf(line, sizeof(line), "Uptime: %luh %02lum", up / 3600, (up % 3600) / 60);
+        snprintf(line, sizeof(line), "Uptime: %luh%lum", up / 3600, (up % 3600) / 60);
     }
-    display->drawStr(0, 55, line);
+    display->setCursor(0, UI_CONTENT_TOP + 38); display->print(line);
 
-    /* Footer: Screen indicator */
-    display->drawStr(0, 64, "[BTN:next]");
-    display->drawStr(70, 64, "1/5");
+    /* Footer */
+    ui_draw_footer(display, "[BTN:next]", 1, SCREEN_COUNT);
 }
 
 static void draw_screen_neighbors(void) {
@@ -354,47 +350,144 @@ static void draw_screen_neighbors(void) {
     draw_header(line);
 
     if (neighbor_count == 0) {
-        display->drawStr(20, 35, "No nodes seen");
-        display->drawStr(15, 47, "Listening...");
+        ui_draw_centered_text(display, UI_CONTENT_TOP + 14, "No nodes seen");
+        ui_draw_centered_text(display, UI_CONTENT_TOP + 26, "Listening...");
     } else {
-        /* Show up to 4 neighbors with scroll */
+        /* Build list items from neighbors */
+        const int max_visible = 4;
         int start = neighbor_scroll;
-        int end = (neighbor_count < start + 4) ? neighbor_count : start + 4;
+        int end = (neighbor_count < start + max_visible) ? neighbor_count : start + max_visible;
 
+        int y = UI_CONTENT_TOP;
         for (int i = start; i < end; i++) {
             struct meshgrid_neighbor *n = &neighbors[i];
-            int y = 22 + (i - start) * 11;
 
-            /* Type icon, name, firmware, signal, hops */
+            /* Build primary text: Type + Name + Firmware */
+            char name_short[10];
+            ui_truncate_text(name_short, n->name, 9);
+            snprintf(line, sizeof(line), "%s %-9s %s",
+                     node_type_char(n->node_type), name_short, fw_name(n->firmware));
+            display->setCursor(0, y);
+            display->print(line);
+
+            /* Build secondary text: RSSI, hops, age */
             uint32_t age_sec = (millis() - n->last_seen) / 1000;
             char age_str[8];
-            if (age_sec < 60) {
-                snprintf(age_str, sizeof(age_str), "%lus", age_sec);
-            } else if (age_sec < 3600) {
-                snprintf(age_str, sizeof(age_str), "%lum", age_sec / 60);
-            } else {
-                snprintf(age_str, sizeof(age_str), "%luh", age_sec / 3600);
-            }
+            ui_format_duration(age_str, sizeof(age_str), age_sec);
 
-            snprintf(line, sizeof(line), "%s%-8s %s %4d %dh %s",
-                     node_type_char(n->node_type),
-                     n->name,
-                     fw_name(n->firmware),
-                     n->rssi,
-                     n->hops,
-                     age_str);
-            display->drawStr(0, y, line);
+            snprintf(line, sizeof(line), "%d %dh %s", n->rssi, n->hops, age_str);
+            int text_width = strlen(line) * 6;
+            display->setCursor(UI_SCREEN_WIDTH - text_width - 2, y);
+            display->print(line);
+
+            y += UI_SPACING_TIGHT;
         }
 
         /* Scroll indicator */
-        if (neighbor_count > 4) {
-            snprintf(line, sizeof(line), "[%d-%d/%d]", start + 1, end, neighbor_count);
-            display->drawStr(75, 64, line);
+        if (neighbor_count > max_visible) {
+            snprintf(line, sizeof(line), "%d-%d/%d", start + 1, end, neighbor_count);
+            int text_width = strlen(line) * 6;
+            display->setCursor(UI_SCREEN_WIDTH - text_width - 2, UI_SCREEN_HEIGHT - 8);
+            display->print(line);
         }
     }
 
-    display->drawStr(0, 64, "[BTN:scroll]");
-    display->drawStr(58, 64, "2/5");
+    ui_draw_footer(display, "[BTN:scroll]", 2, SCREEN_COUNT);
+}
+
+static void draw_screen_messages(void) {
+    char line[32];
+
+    /* Count total unread/recent messages */
+    int total_messages = public_msg_count + direct_msg_count;
+    snprintf(line, sizeof(line), "MESSAGES (%d)", total_messages);
+    draw_header(line);
+
+    if (total_messages == 0) {
+        ui_draw_centered_text(display, UI_CONTENT_TOP + 14, "No messages");
+        ui_draw_centered_text(display, UI_CONTENT_TOP + 26, "yet");
+    } else {
+        /* Show recent messages with scroll */
+        const int max_visible = 4;
+        int start = message_scroll;
+        int displayed = 0;
+        int y = UI_CONTENT_TOP;
+
+        /* Display public messages first, then direct messages */
+        for (int i = public_msg_count - 1; i >= 0 && displayed < max_visible; i--) {
+            if (displayed < start) {
+                displayed++;
+                continue;
+            }
+
+            struct message_entry *msg = &public_messages[i];
+            if (!msg->valid) continue;
+
+            /* Line format: [Sender] Message preview... */
+            char sender_short[10];
+            ui_truncate_text(sender_short, msg->sender_name, 8);
+
+            char text_preview[16];
+            ui_truncate_text(text_preview, msg->text, 15);
+
+            snprintf(line, sizeof(line), "%s: %s", sender_short, text_preview);
+            display->setCursor(0, y);
+            display->print(line);
+
+            /* Show age on right */
+            uint32_t age_sec = (millis() - msg->timestamp) / 1000;
+            char age_str[8];
+            ui_format_duration(age_str, sizeof(age_str), age_sec);
+            int text_width = strlen(age_str) * 6;
+            display->setCursor(UI_SCREEN_WIDTH - text_width - 2, y);
+            display->print(age_str);
+
+            y += UI_SPACING_TIGHT;
+            displayed++;
+        }
+
+        /* Then direct messages */
+        for (int i = direct_msg_count - 1; i >= 0 && displayed < max_visible; i--) {
+            if (displayed < start) {
+                displayed++;
+                continue;
+            }
+
+            struct message_entry *msg = &direct_messages[i];
+            if (!msg->valid) continue;
+
+            char sender_short[10];
+            ui_truncate_text(sender_short, msg->sender_name, 8);
+
+            char text_preview[14];
+            ui_truncate_text(text_preview, msg->text, 13);
+
+            snprintf(line, sizeof(line), "[%s] %s", sender_short, text_preview);
+            display->setCursor(0, y);
+            display->print(line);
+
+            uint32_t age_sec = (millis() - msg->timestamp) / 1000;
+            char age_str[8];
+            ui_format_duration(age_str, sizeof(age_str), age_sec);
+            int text_width = strlen(age_str) * 6;
+            display->setCursor(UI_SCREEN_WIDTH - text_width - 2, y);
+            display->print(age_str);
+
+            y += UI_SPACING_TIGHT;
+            displayed++;
+        }
+
+        /* Scroll indicator */
+        if (total_messages > max_visible) {
+            int end = start + displayed;
+            snprintf(line, sizeof(line), "%d-%d/%d", start + 1, end, total_messages);
+            int text_width = strlen(line) * 6;
+            display->setCursor(UI_SCREEN_WIDTH - text_width - 2, UI_SCREEN_HEIGHT - 8);
+            display->print(line);
+        }
+    }
+
+    ui_draw_footer(display, "[BTN:scroll]", 3, SCREEN_COUNT);
 }
 
 static void draw_screen_stats(void) {
@@ -402,21 +495,25 @@ static void draw_screen_stats(void) {
 
     draw_header("STATISTICS");
 
-    /* Detailed packet stats */
-    snprintf(line, sizeof(line), "Packets RX: %lu", mesh.packets_rx);
-    display->drawStr(0, 22, line);
+    int y = UI_CONTENT_TOP + 2;
 
-    snprintf(line, sizeof(line), "Packets TX: %lu", mesh.packets_tx);
-    display->drawStr(0, 33, line);
+    /* Packet statistics with better formatting */
+    snprintf(line, sizeof(line), "RX:  %lu pkts", mesh.packets_rx);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
 
-    snprintf(line, sizeof(line), "Forwarded:  %lu", mesh.packets_fwd);
-    display->drawStr(0, 44, line);
+    snprintf(line, sizeof(line), "TX:  %lu pkts", mesh.packets_tx);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
 
-    snprintf(line, sizeof(line), "Duplicates: %lu", stat_duplicates);
-    display->drawStr(0, 55, line);
+    snprintf(line, sizeof(line), "FWD: %lu pkts", mesh.packets_fwd);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
 
-    display->drawStr(0, 64, "[BTN:next]");
-    display->drawStr(70, 64, "3/5");
+    snprintf(line, sizeof(line), "DUP: %lu pkts", stat_duplicates);
+    display->setCursor(0, y); display->print(line);
+
+    ui_draw_footer(display, "[BTN:next]", 4, SCREEN_COUNT);
 }
 
 static void draw_screen_info(void) {
@@ -424,20 +521,28 @@ static void draw_screen_info(void) {
 
     draw_header("DEVICE INFO");
 
-    snprintf(line, sizeof(line), "FW: meshgrid %s", MESHGRID_VERSION);
-    display->drawStr(0, 22, line);
+    /* Firmware version with icon */
+    snprintf(line, sizeof(line), "Firmware: v%s", MESHGRID_VERSION);
+    display->setCursor(0, 16); display->print(line);
 
-    snprintf(line, sizeof(line), "Board: %s %s", board->vendor, board->name);
-    display->drawStr(0, 33, line);
+    /* Board info - truncate if too long */
+    char board_name[20];
+    snprintf(board_name, sizeof(board_name), "%s %s", board->vendor, board->name);
+    display->setCursor(0, 28);
+    display->print("Board: ");
+    display->print(board_name);
 
-    snprintf(line, sizeof(line), "Hash: %02X", mesh.our_hash);
-    display->drawStr(0, 44, line);
+    /* Device hash */
+    snprintf(line, sizeof(line), "ID Hash: 0x%02X", mesh.our_hash);
+    display->setCursor(0, 40); display->print(line);
 
-    snprintf(line, sizeof(line), "Heap: %lu bytes", (unsigned long)telemetry.free_heap);
-    display->drawStr(0, 55, line);
+    /* Memory info - show in KB for readability */
+    unsigned long heap_kb = telemetry.free_heap / 1024;
+    snprintf(line, sizeof(line), "Free Mem: %lu KB", heap_kb);
+    display->setCursor(0, 52); display->print(line);
 
-    display->drawStr(0, 64, "[LONG:advert]");
-    display->drawStr(70, 64, "4/5");
+    /* Footer with hint */
+    ui_draw_footer(display, "[LONG:advert]", 5, SCREEN_COUNT);
 }
 
 static void draw_screen_radio(void) {
@@ -453,26 +558,30 @@ static void draw_screen_radio(void) {
         preset = "US";
     }
 
-    /* Line 2: Preset and frequency */
-    snprintf(line, sizeof(line), "Preset: %s (%.3f MHz)", preset, radio_config.frequency);
-    display->drawStr(0, 22, line);
+    int y = UI_CONTENT_TOP + 2;
 
-    /* Line 3: TX power */
+    /* Preset and frequency */
+    snprintf(line, sizeof(line), "%s: %.3f MHz", preset, radio_config.frequency);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
+
+    /* TX power */
     snprintf(line, sizeof(line), "Power: %d dBm", radio_config.tx_power);
-    display->drawStr(0, 33, line);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
 
-    /* Line 4: Bandwidth and spreading factor */
-    snprintf(line, sizeof(line), "BW: %.1f kHz  SF: %d",
+    /* Bandwidth and spreading factor */
+    snprintf(line, sizeof(line), "BW:%.1fkHz SF:%d",
              radio_config.bandwidth, radio_config.spreading_factor);
-    display->drawStr(0, 44, line);
+    display->setCursor(0, y); display->print(line);
+    y += UI_SPACING_NORMAL;
 
-    /* Line 5: Coding rate and preamble */
-    snprintf(line, sizeof(line), "CR: 4/%d  Pre: %d",
+    /* Coding rate and preamble */
+    snprintf(line, sizeof(line), "CR:4/%d Pre:%d",
              radio_config.coding_rate, radio_config.preamble_len);
-    display->drawStr(0, 55, line);
+    display->setCursor(0, y); display->print(line);
 
-    display->drawStr(0, 64, "[BTN:next]");
-    display->drawStr(70, 64, "5/5");
+    ui_draw_footer(display, "[BTN:next]", 6, SCREEN_COUNT);
 }
 
 static void display_update(void) {
@@ -484,8 +593,8 @@ static void display_update(void) {
     last_refresh = millis();
     display_dirty = false;
 
-    display->clearBuffer();
-    display->setFont(u8g2_font_6x10_tf);
+    display->clearDisplay();
+    display->setTextSize(1);
 
     switch (current_screen) {
         case SCREEN_STATUS:
@@ -493,6 +602,9 @@ static void display_update(void) {
             break;
         case SCREEN_NEIGHBORS:
             draw_screen_neighbors();
+            break;
+        case SCREEN_MESSAGES:
+            draw_screen_messages();
             break;
         case SCREEN_STATS:
             draw_screen_stats();
@@ -507,7 +619,7 @@ static void display_update(void) {
             break;
     }
 
-    display->sendBuffer();
+    display->display();
 }
 
 /* ========================================================================= */
@@ -527,21 +639,7 @@ static void print_pubkey_hex(void) {
 /* Hardware initialization                                                   */
 /* ========================================================================= */
 
-static void power_init(void) {
-    const struct power_pins *pwr = &board->power_pins;
-
-    if (pwr->vext >= 0) {
-        pinMode(pwr->vext, OUTPUT);
-        digitalWrite(pwr->vext, pwr->vext_active_low ? LOW : HIGH);
-        delay(100);
-    }
-
-    if (pwr->led >= 0) {
-        pinMode(pwr->led, OUTPUT);
-        digitalWrite(pwr->led, LOW);
-    }
-}
-
+/* power_init() now provided by drivers/power/power.c */
 
 // init_public_channel(), config_load(), config_save() moved to app/config.cpp
 
@@ -569,27 +667,29 @@ static int radio_init(void) {
     radio_spi->begin();
 #endif
 
-    Module *mod = new Module(pins->cs, pins->dio1, pins->reset, pins->busy, *radio_spi);
-    radio = new SX1262(mod);
+    Module *mod = new Module(pins->cs, pins->dio0, pins->reset, pins->dio1, *radio_spi);
 
-    Serial.print("Radio init... ");
-    int state = radio->begin(radio_config.frequency, radio_config.bandwidth, radio_config.spreading_factor,
-                             radio_config.coding_rate, RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
-                             radio_config.tx_power, radio_config.preamble_len);
+    /* Build radio config from current settings */
+    struct radio_config hal_config = {
+        .frequency = radio_config.frequency,
+        .bandwidth = radio_config.bandwidth,
+        .spreading_factor = radio_config.spreading_factor,
+        .coding_rate = radio_config.coding_rate,
+        .tx_power = radio_config.tx_power,
+        .preamble_len = radio_config.preamble_len,
+        .use_crc = board->lora_defaults.use_crc,
+        .tcxo_voltage = board->lora_defaults.tcxo_voltage,
+        .dio2_as_rf_switch = board->lora_defaults.dio2_as_rf_switch,
+    };
 
-    if (state != RADIOLIB_ERR_NONE) {
-        Serial.print("FAILED: ");
-        Serial.println(state);
+    /* Initialize radio via HAL - handles all chip types */
+    if (radio_hal_init(&radio_inst, mod, &hal_config, board->radio) != 0) {
         return -1;
     }
 
-    if (board->lora_defaults.use_crc) radio->setCRC(1);  /* MeshCore uses CRC mode 1 */
-    radio->explicitHeader();  /* MeshCore uses explicit header mode */
+    /* Set up interrupt callback for packet reception */
+    radio()->setPacketReceivedAction(radio_isr);
 
-    /* Set up interrupt callback - CRITICAL for packet reception */
-    radio->setPacketReceivedAction(radio_isr);
-
-    Serial.println("OK");
     return 0;
 }
 
@@ -604,50 +704,43 @@ static int display_init(void) {
     Serial.print(" RST=");
     Serial.println(pins->reset);
 
-    /* Initialize I2C with correct pins for this board */
-    Wire.begin(pins->sda, pins->scl);
-    delay(10);
+    /* Wire.begin() already called early in setup() - like MeshCore does in board.begin() */
 
-    /* Manual reset sequence - important for Heltec displays */
+    /* Manual reset sequence if reset pin is defined */
     if (pins->reset >= 0) {
         pinMode(pins->reset, OUTPUT);
-        digitalWrite(pins->reset, HIGH);
-        delay(1);
         digitalWrite(pins->reset, LOW);
         delay(10);
         digitalWrite(pins->reset, HIGH);
-        delay(100);  /* Give display time to initialize after reset */
+        delay(50);
     }
 
     /* Scan I2C bus for display */
-    Wire.beginTransmission(0x3C);
+    Wire.beginTransmission(pins->addr);
     int i2c_result = Wire.endTransmission();
-    Serial.print("I2C scan 0x3C: ");
+    Serial.print("I2C scan 0x");
+    Serial.print(pins->addr, HEX);
+    Serial.print(": ");
     Serial.println(i2c_result == 0 ? "found" : "not found");
 
-    /* Create U8G2 display - don't pass SCL/SDA, Wire handles it */
-    switch (board->display) {
-        case DISPLAY_SSD1306_128X64:
-            display = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, /* reset= */ U8X8_PIN_NONE);
-            break;
-        case DISPLAY_SSD1306_128X32:
-            display = new U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C(U8G2_R0, /* reset= */ U8X8_PIN_NONE);
-            break;
-        case DISPLAY_SH1106_128X64:
-            display = new U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0, /* reset= */ U8X8_PIN_NONE);
-            break;
-        default:
-            return -1;
-    }
+    /* Point to global display object (constructed before Wire.begin, like MeshCore) */
+    display = &display_128x64;
 
-    if (!display->begin()) {
+    /* Initialize display with SWITCHCAPVCC mode
+     * Reset already done manually, periphBegin=false since Wire.begin() already called */
+    if (!display->begin(SSD1306_SWITCHCAPVCC, pins->addr, false, false)) {
         Serial.println("Display begin() failed!");
-        delete display;
         display = nullptr;
         return -1;
     }
 
-    display->setFont(u8g2_font_6x10_tf);
+    /* Clear and prepare display */
+    display->clearDisplay();
+    display->setTextSize(1);
+    display->setTextColor(SSD1306_WHITE);
+    display->setCursor(0, 0);
+    display->display();
+
     Serial.println("Display initialized OK");
     return 0;
 }
@@ -725,7 +818,21 @@ void setup() {
     board = &CURRENT_BOARD_CONFIG;
     Serial.print("Board: "); Serial.print(board->vendor); Serial.print(" "); Serial.println(board->name);
 
-    if (board->early_init) board->early_init();
+    if (board->early_init) {
+        board->early_init();
+    }
+
+    /* Enable VEXT power FIRST for Heltec boards - OLED needs power before I2C init! */
+    power_init();
+
+    /* Initialize I2C AFTER power - like MeshCore's board.begin() does */
+    const struct display_pins *dpins = &board->display_pins;
+    if (dpins->sda >= 0 && dpins->scl >= 0) {
+        Wire.begin(dpins->sda, dpins->scl);
+        delay(100);  // Give I2C and OLED power time to stabilize
+        Serial.print("I2C init: SDA="); Serial.print(dpins->sda);
+        Serial.print(" SCL="); Serial.println(dpins->scl);
+    }
 
     boot_time = millis();
     identity_init();
@@ -740,18 +847,22 @@ void setup() {
     Serial.print("Mode: "); Serial.println(device_mode == MODE_REPEATER ? "REPEATER" :
                                             device_mode == MODE_ROOM ? "ROOM" : "CLIENT");
 
-    power_init();
     button_init();
     telemetry_init();
     display_init();
 
+    /* Board-specific late initialization (e.g., display contrast) */
+    if (board->late_init) board->late_init();
+
     if (display) {
-        display->clearBuffer();
-        display->setFont(u8g2_font_ncenB14_tr);
-        display->drawStr(10, 30, "MESHGRID");
-        display->setFont(u8g2_font_6x10_tf);
-        display->drawStr(20, 50, board->name);
-        display->sendBuffer();
+        display->clearDisplay();
+        display->setTextSize(2);
+        display->setCursor(10, 20);
+        display->println("MESHGRID");
+        display->setTextSize(1);
+        display->setCursor(20, 45);
+        display->println(board->name);
+        display->display();
         delay(1500);
     }
 
@@ -762,8 +873,7 @@ void setup() {
         // DON'T hang - allow serial CLI to work for debugging
     } else {
         Serial.println("Radio init OK");
-        if (board->late_init) board->late_init();
-        radio->startReceive();
+        radio()->startReceive();
         send_advertisement(ROUTE_DIRECT);  /* Initial local advertisement */
     }
 
@@ -776,7 +886,7 @@ void loop() {
         radio_interrupt_flag = false;  /* Reset flag */
 
         uint8_t rx_buf[MESHGRID_MAX_PACKET_SIZE];
-        int len = radio->getPacketLength();
+        int len = radio()->getPacketLength();
 
         if (len > 0 && len <= MESHGRID_MAX_PACKET_SIZE) {
             /* Clamp to max valid packet size (header + max path + max payload) */
@@ -784,14 +894,14 @@ void loop() {
                 len = 1 + 4 + 1 + MESHGRID_MAX_PATH_SIZE + MESHGRID_MAX_PAYLOAD_SIZE;
             }
 
-            int state = radio->readData(rx_buf, len);
+            int state = radio()->readData(rx_buf, len);
             if (state == RADIOLIB_ERR_NONE) {
-                int16_t rssi = radio->getRSSI();
-                int8_t snr = radio->getSNR();
+                int16_t rssi = radio()->getRSSI();
+                int8_t snr = radio()->getSNR();
                 process_packet(rx_buf, len, rssi, snr);
             }
         }
-        radio->startReceive();
+        radio()->startReceive();
     }
 
     /* Process transmission queue (non-blocking packet forwarding) */

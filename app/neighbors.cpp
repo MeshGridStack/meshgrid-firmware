@@ -100,6 +100,10 @@ void neighbor_update(const uint8_t *pubkey, const char *name,
         crypto_key_exchange(n->shared_secret, mesh.privkey, pubkey);
         n->secret_valid = true;
 
+        /* Initialize sequence counters for Protocol v1 */
+        n->last_seq_rx = 0;
+        n->next_seq_tx = 1;  /* Start at 1 (0 reserved for handshake) */
+
         /* Update type stats */
         switch (n->node_type) {
             case NODE_TYPE_CLIENT: stat_clients++; break;
@@ -107,6 +111,16 @@ void neighbor_update(const uint8_t *pubkey, const char *name,
             case NODE_TYPE_ROOM: stat_rooms++; break;
             default: break;
         }
+    }
+
+    /* Update name if it changed (neighbor might have renamed their device) */
+    if (strcmp(n->name, name) != 0) {
+        strncpy(n->name, name, MESHGRID_NODE_NAME_MAX);
+        n->name[MESHGRID_NODE_NAME_MAX] = '\0';
+
+        /* Re-infer firmware and node type based on new name */
+        n->firmware = infer_firmware(name);
+        n->node_type = infer_node_type(name);
     }
 
     n->last_seen = millis();
