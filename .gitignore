@@ -3,3 +3,6 @@
 *.swp
 *.swo
 .DS_Store
+
+# Local configuration overrides (not committed)
+config.local.h

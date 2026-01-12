@@ -1,0 +1,69 @@
+/**
+ * Local Configuration Overrides (NOT COMMITTED TO GIT)
+ *
+ * Copy this file to config.local.h and customize for your development setup.
+ * The config.local.h file is in .gitignore and won't be committed.
+ *
+ * This allows you to override defaults without changing the codebase.
+ */
+
+#ifndef MESHGRID_CONFIG_LOCAL_H
+#define MESHGRID_CONFIG_LOCAL_H
+
+/* ============================================================================
+ * Security Settings
+ * ============================================================================ */
+
+/* PIN Authentication (default: enabled for security)
+ * Uncomment to disable PIN requirement for development */
+// #define DEFAULT_SECURITY_ENABLED false
+
+/* ============================================================================
+ * Optional Features (Compile-Time)
+ * ============================================================================ */
+
+/* BLE Support (default: disabled, adds 600KB to firmware)
+ * Enable BLE by using the *_ble build variant in platformio.ini
+ * Example: pio run -e heltec_v3_ble */
+
+/* MQTT Support (default: disabled)
+ * Uncomment to enable MQTT bridging support */
+// #define MESHGRID_MQTT_SUPPORT
+
+/* ============================================================================
+ * Serial/Debug Settings
+ * ============================================================================ */
+
+/* Serial Output (default: enabled)
+ * Uncomment to disable serial output (saves ~2KB, not recommended) */
+// #define DISABLE_SERIAL_OUTPUT
+
+/* Verbose Boot Messages (default: enabled)
+ * Uncomment to reduce boot verbosity */
+// #define QUIET_BOOT
+
+/* ============================================================================
+ * Radio Defaults (for development)
+ * ============================================================================ */
+
+/* Override default radio preset
+ * Uncomment to change default frequency/settings on first boot */
+// #define DEFAULT_FREQUENCY 869.620f    // EU: 869.620, US: 915.0
+// #define DEFAULT_TX_POWER 14           // dBm (max safe value)
+// #define DEFAULT_BANDWIDTH 62.5f       // kHz
+// #define DEFAULT_SPREADING_FACTOR 8
+// #define DEFAULT_CODING_RATE 8
+
+/* ============================================================================
+ * Development/Testing Options
+ * ============================================================================ */
+
+/* Auto-send advertisement on boot (default: enabled)
+ * Uncomment to disable for testing */
+// #define DISABLE_BOOT_ADVERT
+
+/* Test mode (enables additional debug output)
+ * Uncomment for verbose debug info */
+// #define TEST_MODE
+
+#endif /* MESHGRID_CONFIG_LOCAL_H */
