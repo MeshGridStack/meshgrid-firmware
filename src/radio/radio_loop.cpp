@@ -3,7 +3,7 @@
  */
 
 #include "radio_loop.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 #include <Arduino.h>
 #include <RadioLib.h>
 
@@ -53,11 +53,15 @@ void radio_loop_process(void) {
         int state = get_radio()->startReceive();
         if (state == RADIOLIB_ERR_NONE) {
             radio_in_rx_mode = true;
+            static uint32_t last_ok_log = 0;
+            if (millis() - last_ok_log > 5000) {  /* Log success periodically */
+                DEBUG_INFOF("[RX] In RX mode, ISR count=%lu", isr_trigger_count);
+                last_ok_log = millis();
+            }
         } else {
             static uint32_t last_error_log = 0;
             if (millis() - last_error_log > 1000) {  /* Rate limit error logging */
-                SerialOutput.print("[RX] startReceive() failed: ");
-                Serial.println(state);
+                DEBUG_ERRORF("[RX] startReceive() failed: %d", state);
                 last_error_log = millis();
             }
         }

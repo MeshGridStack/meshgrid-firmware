@@ -3,7 +3,7 @@
  */
 
 #include "config.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 #include <Arduino.h>
 #include <Preferences.h>
 #include <mbedtls/base64.h>
@@ -34,10 +34,6 @@ extern struct radio_config_t {
 } radio_config;
 
 extern enum meshgrid_device_mode device_mode;
-extern bool log_enabled;
-extern String log_buffer[];
-extern int log_index, log_count;
-
 extern const struct board_config *board;
 
 /* RTC time tracking */
@@ -47,7 +43,6 @@ struct rtc_time_t {
 };
 extern struct rtc_time_t rtc_time;
 
-#define LOG_BUFFER_SIZE 50
 #define MESHGRID_NODE_NAME_MAX 16
 
 
@@ -69,15 +64,9 @@ void init_public_channel(void) {
         crypto_sha256(hash, sizeof(hash), public_channel_secret, olen);
         public_channel_hash = hash[0];
 
-        SerialOutput.print("Public channel initialized, hash: 0x");
-        SerialOutput.print(public_channel_hash, HEX);
-        SerialOutput.print(" (");
-        SerialOutput.print(olen);
-        Serial.println(" byte key)");
+        DEBUG_INFOF("Public channel initialized, hash: 0x%02x (%d byte key)", public_channel_hash, olen);
     } else {
-        SerialOutput.print("ERROR: Failed to decode PUBLIC_CHANNEL_PSK (got ");
-        SerialOutput.print(olen);
-        Serial.println(" bytes)");
+        DEBUG_ERRORF("Failed to decode PUBLIC_CHANNEL_PSK (got %d bytes)", olen);
     }
 }
 
@@ -92,7 +81,7 @@ void config_load(void) {
         radio_config.coding_rate = prefs.getUChar("cr", board->lora_defaults.coding_rate);
         radio_config.preamble_len = prefs.getUShort("preamble", board->lora_defaults.preamble_len);
         radio_config.tx_power = prefs.getChar("power", board->lora_defaults.tx_power);
-        Serial.println("Loaded radio config from flash");
+        DEBUG_INFO("Loaded radio config from flash");
     } else {
         // Use board defaults
         radio_config.frequency = board->lora_defaults.frequency;
@@ -101,28 +90,25 @@ void config_load(void) {
         radio_config.coding_rate = board->lora_defaults.coding_rate;
         radio_config.preamble_len = board->lora_defaults.preamble_len;
         radio_config.tx_power = board->lora_defaults.tx_power;
-        Serial.println("Using board default radio config");
+        DEBUG_INFO("Using board default radio config");
     }
 
     /* Load device mode */
     device_mode = (enum meshgrid_device_mode)prefs.getUChar("mode", MODE_CLIENT);
-
-    /* Load logging state */
-    log_enabled = prefs.getBool("log_en", false);
 
     /* Load node name if saved */
     String saved_name = prefs.getString("name", "");
     if (saved_name.length() > 0) {
         strncpy(mesh.name, saved_name.c_str(), MESHGRID_NODE_NAME_MAX);
         mesh.name[MESHGRID_NODE_NAME_MAX] = '\0';
-        Serial.println("Loaded node name from flash");
+        DEBUG_INFO("Loaded node name from flash");
     }
 
     /* Load RTC time if saved */
     if (prefs.getBool("rtc_valid", false)) {
         rtc_time.epoch_at_boot = prefs.getUInt("rtc_epoch", 0);
         rtc_time.valid = true;
-        Serial.println("Loaded RTC time from flash");
+        DEBUG_INFO("Loaded RTC time from flash");
     }
 
     prefs.end();
@@ -141,29 +127,10 @@ void config_save(void) {
     /* Save device mode */
     prefs.putUChar("mode", (uint8_t)device_mode);
 
-    /* Save logging state */
-    prefs.putBool("log_en", log_enabled);
-
     /* Save node name */
     prefs.putString("name", mesh.name);
 
-    /* Save recent log entries (last 20 to limit NVS usage) */
-    int save_count = (log_count > 20) ? 20 : log_count;
-    prefs.putUChar("log_cnt", save_count);
-    if (save_count > 0) {
-        int start = (log_count < LOG_BUFFER_SIZE) ? 0 : log_index;
-        /* Save most recent entries */
-        int saved = 0;
-        for (int i = log_count - save_count; i < log_count; i++) {
-            int idx = (start + i) % LOG_BUFFER_SIZE;
-            char key[16];
-            snprintf(key, sizeof(key), "log%d", saved);
-            prefs.putString(key, log_buffer[idx]);
-            saved++;
-        }
-    }
-
     prefs.end();
     radio_config.config_saved = true;
-    Serial.println("Saved config to flash");
+    DEBUG_INFO("Saved config to flash");
 }

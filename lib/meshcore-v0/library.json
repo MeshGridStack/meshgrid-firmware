@@ -1,0 +1,35 @@
+{
+    "name": "meshcore-v0",
+    "version": "1.0.0",
+    "description": "MeshCore Protocol v0 - Self-contained library for meshgrid-firmware",
+    "keywords": ["lora", "mesh", "protocol", "meshcore"],
+    "authors": [
+        {
+            "name": "MeshCore Team",
+            "url": "https://github.com/ripplebiz/MeshCore"
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ripplebiz/MeshCore"
+    },
+    "license": "MIT",
+    "frameworks": "arduino",
+    "platforms": "*",
+    "dependencies": {
+        "SPI": "*",
+        "Wire": "*",
+        "jgromes/RadioLib": "^7.3.0",
+        "rweather/Crypto": "^0.4.0"
+    },
+    "build": {
+        "flags": [
+            "-DMESHCORE_V0_LIBRARY",
+            "-DRADIOLIB_STATIC_ONLY=1"
+        ],
+        "srcFilter": [
+            "+<*>",
+            "+<lib/ed25519/*.c>"
+        ]
+    }
+}

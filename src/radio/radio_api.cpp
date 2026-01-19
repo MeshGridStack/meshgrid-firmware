@@ -7,9 +7,20 @@
 
 #include "radio_hal.h"
 #include <Arduino.h>
+#include "../network/protocol.h"
 
-/* External radio instance from main.cpp */
+/* Debug output */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void debug_printf(int level, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+#ifdef __cplusplus
+}
+#endif
+
+/* External instances from main.cpp */
 extern struct radio_instance radio_inst;
+extern struct meshgrid_state mesh;
 
 int radio_set_frequency(float freq) {
     switch (radio_inst.type) {
@@ -92,4 +103,28 @@ int radio_set_preamble_length(uint16_t len) {
 PhysicalLayer* get_radio() {
     extern struct radio_instance radio_inst;
     return radio_inst.as_phy();
+}
+
+/* External ISR from main.cpp */
+extern void radio_isr(void);
+
+/* C-style wrappers for protocol libraries to avoid vtable/struct layout issues */
+extern "C" {
+    extern volatile bool radio_interrupt_flag;
+
+    int16_t radio_transmit(uint8_t* data, size_t len) {
+        /* Simple blocking transmit - RadioLib will handle polling */
+        int16_t result = get_radio()->transmit(data, len);
+        /* Debug: Log actual return value to diagnose board differences */
+        if (result != 0) {
+            debug_printf(0, "WARN: radio_transmit returned %d (expected 0)", result);
+        }
+        return result;
+    }
+
+    int16_t radio_start_receive(void) {
+        return get_radio()->startReceive();
+    }
+
+    // mesh_increment_tx/rx moved to core/mesh_accessor.c
 }

@@ -124,6 +124,7 @@ struct lora_config {
     bool use_crc;
     float tcxo_voltage;     // TCXO reference voltage (0 = no TCXO)
     bool dio2_as_rf_switch; // Use DIO2 as RF switch (common on SX1262)
+    uint8_t sync_word;      // LoRa sync word (0x12 for MeshCore compat, 0 = use radio default)
 };
 
 /**

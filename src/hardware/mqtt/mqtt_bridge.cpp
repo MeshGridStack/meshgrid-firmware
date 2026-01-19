@@ -6,7 +6,7 @@
  */
 
 #include "mqtt_bridge.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 
 #ifdef MESHGRID_MQTT_SUPPORT
 
@@ -86,14 +86,14 @@ void mqtt_set_config(const struct mqtt_config *config)
 int mqtt_connect(void)
 {
     if (!WiFi.isConnected()) {
-        Serial.println("[MQTT] WiFi not connected");
+        DEBUG_INFO("[MQTT] WiFi not connected");
         return -1;
     }
 
     SerialOutput.print("[MQTT] Connecting to ");
     SerialOutput.print(current_config.broker_host);
     SerialOutput.print(":");
-    Serial.println(current_config.broker_port);
+    DEBUG_INFO(current_config.broker_port);
 
     bool connected;
     if (current_config.username != nullptr) {
@@ -105,7 +105,7 @@ int mqtt_connect(void)
     }
 
     if (connected) {
-        Serial.println("[MQTT] Connected");
+        DEBUG_INFO("[MQTT] Connected");
 
         /* Publish online status */
         char status_topic[MAX_TOPIC_LEN];
@@ -127,7 +127,7 @@ int mqtt_connect(void)
         return 0;
     } else {
         SerialOutput.print("[MQTT] Connection failed, rc=");
-        Serial.println(mqtt_client.state());
+        DEBUG_INFO(mqtt_client.state());
         return -1;
     }
 }
@@ -141,7 +141,7 @@ void mqtt_disconnect(void)
         mqtt_client.publish(status_topic, "offline", true);
 
         mqtt_client.disconnect();
-        Serial.println("[MQTT] Disconnected");
+        DEBUG_INFO("[MQTT] Disconnected");
     }
 }
 

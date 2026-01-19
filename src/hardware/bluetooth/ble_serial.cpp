@@ -5,8 +5,9 @@
  */
 
 #include "ble_serial.h"
+#include "utils/debug.h"
 
-#if defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32) && defined(ENABLE_BLE)
 
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -36,17 +37,17 @@ static volatile uint16_t ble_rx_tail = 0;
 class MyBLEServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
         ble_client_connected = true;
-        Serial.println("[BLE] Client connected");
+        DEBUG_INFO("[BLE] Client connected");
     }
 
     void onDisconnect(BLEServer* pServer) {
         ble_client_connected = false;
-        Serial.println("[BLE] Client disconnected");
+        DEBUG_INFO("[BLE] Client disconnected");
 
         /* Restart advertising so clients can reconnect */
         delay(500);
         pServer->startAdvertising();
-        Serial.println("[BLE] Advertising restarted");
+        DEBUG_INFO("[BLE] Advertising restarted");
     }
 };
 
@@ -65,7 +66,7 @@ class BLERxCallbacks: public BLECharacteristicCallbacks {
                     ble_rx_buffer[ble_rx_head] = value[i];
                     ble_rx_head = next;
                 } else {
-                    Serial.println("[BLE] RX buffer overflow!");
+                    DEBUG_INFO("[BLE] RX buffer overflow!");
                     break;
                 }
             }
@@ -75,12 +76,12 @@ class BLERxCallbacks: public BLECharacteristicCallbacks {
 
 int ble_serial_init(const char *device_name) {
     if (ble_initialized) {
-        Serial.println("[BLE] Already initialized");
+        DEBUG_INFO("[BLE] Already initialized");
         return 0;
     }
 
-    Serial.print("[BLE] Initializing as: ");
-    Serial.println(device_name);
+    DEBUG_INFO("[BLE] Initializing as: ");
+    DEBUG_INFO(device_name);
 
     /* Initialize BLE */
     BLEDevice::init(device_name);
@@ -117,8 +118,8 @@ int ble_serial_init(const char *device_name) {
     advertising->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
-    Serial.println("[BLE] UART service started");
-    Serial.println("[BLE] Waiting for client connection...");
+    DEBUG_INFO("[BLE] UART service started");
+    DEBUG_INFO("[BLE] Waiting for client connection...");
 
     ble_initialized = true;
     return 0;
@@ -178,12 +179,11 @@ int ble_serial_read(void) {
     return data;
 }
 
-#else /* !ARDUINO_ARCH_ESP32 */
+#else /* !ENABLE_BLE || !ARDUINO_ARCH_ESP32 */
 
-/* Stub implementations for non-ESP32 platforms */
+/* Stub implementations for non-BLE builds or non-ESP32 platforms */
 int ble_serial_init(const char *device_name) {
-    Serial.println("[BLE] Not supported on this platform");
-    return -1;
+    return 0;  /* Silently succeed - BLE not enabled */
 }
 
 void ble_serial_process(void) {}
@@ -192,4 +192,4 @@ int ble_serial_write(const uint8_t *data, size_t len) { return 0; }
 int ble_serial_available(void) { return 0; }
 int ble_serial_read(void) { return -1; }
 
-#endif /* ARDUINO_ARCH_ESP32 */
+#endif /* ENABLE_BLE && ARDUINO_ARCH_ESP32 */

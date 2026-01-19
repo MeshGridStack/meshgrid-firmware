@@ -1,0 +1,23 @@
+{
+  "name": "meshgrid-protocol-auto",
+  "version": "0.1.0",
+  "description": "Auto-detection protocol wrapper - uses v1 for meshgrid, v0 for MeshCore compatibility",
+  "keywords": ["lora", "mesh", "protocol", "auto-detect"],
+  "authors": [
+    {
+      "name": "meshgrid",
+      "url": "https://github.com/meshgrid"
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "build": {
+    "flags": "-DPROTOCOL_V0_ENABLED=1 -DPROTOCOL_V1_ENABLED=1",
+    "libArchive": false
+  },
+  "dependencies": {
+    "meshgrid-protocol-v0": "*",
+    "meshgrid-protocol-v1": "*"
+  }
+}

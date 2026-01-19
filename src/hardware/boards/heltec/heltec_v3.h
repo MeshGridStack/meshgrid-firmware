@@ -72,6 +72,7 @@ static const struct board_config heltec_v3_config = {
         .use_crc = true,
         .tcxo_voltage = 1.8,        // Heltec V3 has TCXO
         .dio2_as_rf_switch = true,  // Uses DIO2 for RF switching
+        .sync_word = 0x12,          // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
     },
 
     .radio_ops = NULL,  /* Auto-detect from radio type */

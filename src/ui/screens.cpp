@@ -3,7 +3,7 @@
  */
 
 #include "screens.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 #include "utils/ui_lib.h"
 #include "utils/types.h"
 #include "hardware/board.h"
@@ -67,12 +67,7 @@ int display_init(Adafruit_SSD1306 **display_out) {
         return 0;
     }
 
-    SerialOutput.print("Display init: SDA=");
-    SerialOutput.print(pins->sda);
-    SerialOutput.print(" SCL=");
-    SerialOutput.print(pins->scl);
-    SerialOutput.print(" RST=");
-    Serial.println(pins->reset);
+    DEBUG_INFOF("Display init: SDA=%d SCL=%d RST=%d", pins->sda, pins->scl, pins->reset);
 
     /* Wire.begin() already called early in setup() */
 
@@ -88,10 +83,7 @@ int display_init(Adafruit_SSD1306 **display_out) {
     /* Scan I2C bus for display */
     Wire.beginTransmission(pins->addr);
     int i2c_result = Wire.endTransmission();
-    SerialOutput.print("I2C scan 0x");
-    SerialOutput.print(pins->addr, HEX);
-    SerialOutput.print(": ");
-    Serial.println(i2c_result == 0 ? "found" : "not found");
+    DEBUG_INFOF("I2C scan 0x%02x: %s", pins->addr, i2c_result == 0 ? "found" : "not found");
 
     /* Point to global display object */
     *display_out = &display_128x64;
@@ -99,7 +91,7 @@ int display_init(Adafruit_SSD1306 **display_out) {
     /* Initialize display with SWITCHCAPVCC mode
      * Reset already done manually, periphBegin=false since Wire.begin() already called */
     if (!(*display_out)->begin(SSD1306_SWITCHCAPVCC, pins->addr, false, false)) {
-        Serial.println("Display begin() failed!");
+        DEBUG_INFO("Display begin() failed!");
         *display_out = nullptr;
         return -1;
     }
@@ -111,7 +103,7 @@ int display_init(Adafruit_SSD1306 **display_out) {
     (*display_out)->setCursor(0, 0);
     (*display_out)->display();
 
-    Serial.println("Display initialized OK");
+    DEBUG_INFO("Display initialized OK");
     return 0;
 }
 

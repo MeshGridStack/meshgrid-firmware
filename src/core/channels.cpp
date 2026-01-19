@@ -2,8 +2,8 @@
  * Channel management and persistence
  */
 
+#include "utils/debug.h"
 #include <Arduino.h>
-#include "utils/serial_output.h"
 #include <Preferences.h>
 #include <mbedtls/base64.h>
 #include "utils/memory.h"
@@ -42,9 +42,7 @@ void channels_save_to_nvs(void) {
     prefs.putUChar("count", saved_count);
     prefs.end();
 
-    SerialOutput.print("Saved ");
-    SerialOutput.print(saved_count);
-    Serial.println(" channels to NVS");
+    DEBUG_INFOF("Saved %d channels to NVS", saved_count);
 }
 
 void channels_load_from_nvs(void) {
@@ -77,11 +75,7 @@ void channels_load_from_nvs(void) {
         ch->valid = true;
         custom_channel_count++;
 
-        SerialOutput.print("Restored channel: ");
-        SerialOutput.print(ch->name);
-        SerialOutput.print(" (0x");
-        SerialOutput.print(ch->hash, HEX);
-        Serial.println(")");
+        DEBUG_INFOF("Restored channel: %s (0x%02x)", ch->name, ch->hash);
     }
 
     prefs.end();

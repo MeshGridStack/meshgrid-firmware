@@ -28,6 +28,7 @@ struct radio_config {
     bool use_crc;
     float tcxo_voltage;
     bool dio2_as_rf_switch;
+    uint8_t sync_word;      // LoRa sync word (0x12 for MeshCore compat, 0 = use radio default)
 };
 
 /**

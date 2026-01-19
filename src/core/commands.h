@@ -11,6 +11,12 @@
 #include <Arduino.h>
 
 /**
+ * Initialize serial command handling
+ * Call from setup() to clear buffers
+ */
+void serial_commands_init(void);
+
+/**
  * Handle CLI command (uppercase, MeshCore-compatible)
  */
 void handle_cli_command(const String &cmd);

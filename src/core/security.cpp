@@ -3,7 +3,7 @@
  */
 
 #include "security.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 #include <Preferences.h>
 
 /* Include local config overrides if present */
@@ -13,7 +13,7 @@
 
 /* Default security setting (can be overridden in config.local.h) */
 #ifndef DEFAULT_SECURITY_ENABLED
-#define DEFAULT_SECURITY_ENABLED true
+#define DEFAULT_SECURITY_ENABLED false  /* Disabled for testing/development */
 #endif
 
 extern Preferences prefs;
@@ -42,8 +42,7 @@ void security_init(void) {
     String saved_pin = prefs.getString("pin", "");
     if (saved_pin.length() == 6) {
         strncpy(security.pin, saved_pin.c_str(), 7);
-        SerialOutput.print("Security: PIN authentication ");
-        Serial.println(security.pin_enabled ? "enabled" : "disabled");
+        DEBUG_INFOF("Security: PIN authentication %s", security.pin_enabled ? "enabled" : "disabled");
     } else {
         // Generate random 6-digit PIN
         uint32_t random_pin = esp_random() % 1000000;
@@ -60,8 +59,8 @@ void security_init(void) {
         // Update runtime state to match saved default
         security.pin_enabled = DEFAULT_SECURITY_ENABLED;
 
-        Serial.println("Security: Generated new PIN");
-        Serial.println("View PIN on OLED: Navigate to Security screen");
+        DEBUG_INFO("Security: Generated new PIN");
+        DEBUG_INFO("View PIN on OLED: Navigate to Security screen");
     }
 
     prefs.end();
@@ -90,9 +89,7 @@ bool security_authenticate(const char *pin) {
     // Check lockout first
     if (security_is_locked()) {
         uint32_t remaining = (security.lockout_until - millis()) / 1000;
-        SerialOutput.print("ERROR: Locked out for ");
-        SerialOutput.print(remaining);
-        Serial.println(" more seconds");
+        DEBUG_ERRORF("Locked out for %lu more seconds", remaining);
         return false;
     }
 
@@ -100,18 +97,16 @@ bool security_authenticate(const char *pin) {
     if (strcmp(pin, security.pin) == 0) {
         security.authenticated = true;
         security.failed_attempts = 0;
-        Serial.println("OK: Authenticated");
+        DEBUG_INFO("Authenticated");
         return true;
     } else {
         security.failed_attempts++;
 
         if (security.failed_attempts >= 3) {
             security.lockout_until = millis() + 300000; // 5 minutes
-            SerialOutput.print("ERROR: Too many failed attempts. Locked for 5 minutes.");
+            DEBUG_ERROR("Too many failed attempts. Locked for 5 minutes.");
         } else {
-            SerialOutput.print("ERROR: Invalid PIN (");
-            SerialOutput.print(3 - security.failed_attempts);
-            Serial.println(" attempts remaining)");
+            DEBUG_ERRORF("Invalid PIN (%d attempts remaining)", 3 - security.failed_attempts);
         }
         return false;
     }
@@ -135,12 +130,12 @@ bool security_is_locked(void) {
 bool security_set_pin(const char *new_pin) {
     // Validate PIN format
     if (strlen(new_pin) != 6) {
-        Serial.println("ERROR: PIN must be exactly 6 digits");
+        DEBUG_INFO("ERROR: PIN must be exactly 6 digits");
         return false;
     }
 
     if (!is_numeric(new_pin)) {
-        Serial.println("ERROR: PIN must contain only digits");
+        DEBUG_INFO("ERROR: PIN must contain only digits");
         return false;
     }
 
@@ -152,7 +147,7 @@ bool security_set_pin(const char *new_pin) {
     prefs.putString("pin", security.pin);
     prefs.end();
 
-    Serial.println("OK: PIN changed successfully");
+    DEBUG_INFO("OK: PIN changed successfully");
     return true;
 }
 
@@ -164,7 +159,7 @@ void security_disable_pin(void) {
     prefs.putBool("pin_enabled", false);
     prefs.end();
 
-    Serial.println("WARNING: PIN authentication disabled - device is now unsecured!");
+    DEBUG_INFO("WARNING: PIN authentication disabled - device is now unsecured!");
 }
 
 void security_enable_pin(void) {
@@ -175,7 +170,5 @@ void security_enable_pin(void) {
     prefs.putBool("pin_enabled", true);
     prefs.end();
 
-    SerialOutput.print("OK: PIN authentication enabled (PIN: ");
-    SerialOutput.print(security.pin);
-    Serial.println(")");
+    DEBUG_INFOF("PIN authentication enabled (PIN: %s)", security.pin);
 }

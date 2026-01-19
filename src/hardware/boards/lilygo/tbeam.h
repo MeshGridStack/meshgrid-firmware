@@ -30,7 +30,7 @@ static const struct board_config lilygo_tbeam_config = {
         .reset = 23,
         .busy = -1,
         .dio0 = 26,
-        .dio1 = -1,
+        .dio1 = 33,  // DIO1 for RX Timeout (matches MeshCore)
         .rxen = -1,
         .txen = -1,
     },
@@ -68,6 +68,9 @@ static const struct board_config lilygo_tbeam_config = {
         .tx_power = 20,
         .preamble_len = 8,
         .use_crc = true,
+        .tcxo_voltage = 0.0,
+        .dio2_as_rf_switch = false,
+        .sync_word = 0x12,  // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
     },
 
     .radio_ops = NULL,  /* Auto-detect from radio type */

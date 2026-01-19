@@ -82,8 +82,8 @@
 /* Event log buffer */
 #define LOG_BUFFER_SIZE 50
 
-/* Packet deduplication table (seen packets) */
-#define SEEN_TABLE_SIZE 64
+/* Packet deduplication table (seen packets) - expanded for better duplicate detection */
+#define SEEN_TABLE_SIZE 1024
 
 /* TX queue size */
 #define TX_QUEUE_SIZE 16

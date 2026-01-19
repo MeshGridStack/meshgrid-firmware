@@ -39,19 +39,28 @@ bool tx_queue_add(const uint8_t *buf, int len, uint32_t delay_ms, uint8_t priori
 void tx_queue_process(void);
 uint32_t airtime_get_silence_required(void);
 
-/* Log an event to the log buffer */
-void log_event(const String &msg);
-
 /* Send advertisement packet */
 void send_advertisement(uint8_t route);
 
-/* Send encrypted text message to specific peer */
+/* Send encrypted text message to specific peer - v0 (MeshCore compatible) */
+void send_text_message_v0(uint8_t dest_hash, const char *text);
+
+/* Send encrypted text message to specific peer - v1 (Enhanced security) */
+void send_text_message_v1(uint8_t dest_hash, const char *text);
+
+/* Send encrypted text message to specific peer - wrapper (auto-detects version) */
 void send_text_message(uint8_t dest_hash, const char *text);
 
 /* Send encrypted group message */
 void send_group_message(const char *text);
 
-/* Send encrypted message to specific channel */
+/* Send encrypted message to specific channel - v0 (MeshCore compatible) */
+void send_channel_message_v0(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name);
+
+/* Send encrypted message to specific channel - v1 (Enhanced security) */
+void send_channel_message_v1(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name);
+
+/* Send encrypted message to specific channel - wrapper (auto-detects version) */
 void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret, const char *text, const char *channel_name);
 
 /* Process received packet */

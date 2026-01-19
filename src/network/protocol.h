@@ -189,6 +189,7 @@ struct meshgrid_neighbor {
     int8_t snr;
     enum meshgrid_node_type node_type; /* Inferred node type */
     enum meshgrid_firmware firmware;   /* Detected firmware */
+    uint8_t protocol_version;          /* Protocol version advertised (0=v0, 1=v1) */
     uint8_t hops;                      /* Hop count when first seen */
     uint8_t shared_secret[32];         /* Cached ECDH shared secret */
     bool secret_valid;                 /* True if shared_secret is cached */
@@ -228,6 +229,10 @@ struct meshgrid_state {
  * Function prototypes
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Compute 1-byte hash from public key (MeshCore compatible) */
 uint8_t meshgrid_hash_pubkey(const uint8_t *pubkey);
 
@@ -257,5 +262,9 @@ int meshgrid_create_advert(struct meshgrid_packet *pkt, const uint8_t *pubkey,
 int meshgrid_parse_advert(const struct meshgrid_packet *pkt,
                           uint8_t *pubkey, char *name, size_t name_max,
                           uint32_t *timestamp);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* MESHGRID_PROTOCOL_H */

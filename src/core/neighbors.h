@@ -22,7 +22,7 @@ struct meshgrid_neighbor *neighbor_find(uint8_t hash);
 /* Update or add neighbor */
 void neighbor_update(const uint8_t *pubkey, const char *name,
                      uint32_t timestamp, int16_t rssi, int8_t snr,
-                     uint8_t hops);
+                     uint8_t hops, uint8_t protocol_version);
 
 /* Get cached shared secret for neighbor (returns nullptr if not found/valid) */
 const uint8_t *neighbor_get_shared_secret(uint8_t hash);
@@ -38,5 +38,8 @@ void neighbors_save_to_nvs(void);
 
 /* Load neighbors from NVS on boot */
 void neighbors_load_from_nvs(void);
+
+/* Prune stale neighbors (not seen for NEIGHBOR_TIMEOUT) */
+void neighbors_prune_stale(void);
 
 #endif /* MESHGRID_NEIGHBORS_H */

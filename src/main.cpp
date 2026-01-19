@@ -35,6 +35,7 @@
 #include "utils/types.h"
 #include "utils/ui_lib.h"
 #include "utils/serial_output.h"
+#include "utils/debug.h"
 #include "version.h"
 
 /* ===== Hardware Abstraction ===== */
@@ -72,6 +73,10 @@ extern "C" {
 #include "core/advertising.h"
 #include "core/power.h"
 #include "core/commands.h"
+#include "core/meshcore_bridge.h"
+
+/* Protocol advertisement handlers */
+#include <advert_auto.h>
 
 /* ===== User Interface ===== */
 #include "ui/screens.h"
@@ -95,6 +100,7 @@ int custom_channel_count = 0;
  * Configuration - set via serial commands or stored in flash
  */
 enum meshgrid_device_mode device_mode = MODE_CLIENT;
+uint32_t advert_interval_ms = (12 * 60 * 60 * 1000);  /* 12 hours */
 
 /*
  * Board and hardware
@@ -169,18 +175,7 @@ uint32_t stat_clients = 0;
 uint32_t stat_repeaters = 0;
 uint32_t stat_rooms = 0;
 
-/*
- * Monitor mode - output ADV/MSG events when true
- */
-bool monitor_mode = false;
-
-/*
- * Event log buffer (circular)
- */
-String log_buffer[LOG_BUFFER_SIZE];
-int log_index = 0;
-int log_count = 0;
-bool log_enabled = false;
+/* LOG/MONITOR system removed - use DEBUG macros for development debugging */
 
 /*
  * Message inbox buffers (tiered by channel type)
@@ -269,6 +264,7 @@ void ICACHE_RAM_ATTR radio_isr(void) {
 void radio_isr(void) {
     radio_interrupt_flag = true;
     isr_trigger_count++;
+    digitalWrite(board->power_pins.led, !digitalRead(board->power_pins.led)); // Toggle LED on interrupt
 }
 #endif
 
@@ -294,6 +290,7 @@ static int radio_init(void) {
         .use_crc = board->lora_defaults.use_crc,
         .tcxo_voltage = board->lora_defaults.tcxo_voltage,
         .dio2_as_rf_switch = board->lora_defaults.dio2_as_rf_switch,
+        .sync_word = board->lora_defaults.sync_word,
     };
 
     /* Initialize radio via HAL - Module creation handled inside */
@@ -301,8 +298,13 @@ static int radio_init(void) {
         return -1;
     }
 
-    /* Set up interrupt callback for packet reception (RadioLib handles DIO1 GPIO config) */
+    /* Set up interrupt callback for RX only (RadioLib handles DIO GPIO config) */
+    /* TX uses blocking/polling mode, so no TX interrupt needed */
     radio()->setPacketReceivedAction(radio_isr);
+    DEBUG_INFOF("ISR attached to DIO%d (pin %d)",
+                board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ? 0 : 1,
+                board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ?
+                    board->radio_pins.dio0 : board->radio_pins.dio1);
 
     return 0;
 }
@@ -315,18 +317,10 @@ bool radio_ok = true;
 
 void setup() {
     Serial.begin(115200);
-    // ESP32-S3 USB CDC takes time to become active
-    // Wait for USB to be ready before sending any output
-    delay(2000);
-
-    Serial.println("\n=================================");
-    Serial.println("  MESHGRID - MeshCore Compatible");
-    SerialOutput.print("  Firmware v"); Serial.println(MESHGRID_VERSION);
-    SerialOutput.print("  Build: "); Serial.println(MESHGRID_BUILD_DATE);
-    Serial.println("=================================\n");
+    delay(100);  /* Brief delay for serial init */
+    serial_commands_init();  /* Clear serial buffers */
 
     board = &CURRENT_BOARD_CONFIG;
-    SerialOutput.print("Board: "); SerialOutput.print(board->vendor); SerialOutput.print(" "); Serial.println(board->name);
 
     if (board->early_init) {
         board->early_init();
@@ -340,8 +334,6 @@ void setup() {
     if (dpins->sda >= 0 && dpins->scl >= 0) {
         Wire.begin(dpins->sda, dpins->scl);
         delay(100);  // Give I2C and OLED power time to stabilize
-        SerialOutput.print("I2C init: SDA="); SerialOutput.print(dpins->sda);
-        SerialOutput.print(" SCL="); Serial.println(dpins->scl);
     }
 
     boot_time = millis();
@@ -353,9 +345,9 @@ void setup() {
     neighbors_load_from_nvs();  // Restore neighbors with cached secrets
     channels_load_from_nvs();   // Restore custom channels
 
-    SerialOutput.print("Node: "); SerialOutput.print(mesh.name);
-    SerialOutput.print(" ("); SerialOutput.print(mesh.our_hash, HEX); Serial.println(")");
-    SerialOutput.print("Mode: "); Serial.println(device_mode == MODE_REPEATER ? "REPEATER" : "CLIENT");
+    DEBUG_INFO("=== Initializing MeshCore v0 ===");
+    meshcore_bridge_initialize();  // Initialize MeshCore v0 integration
+    DEBUG_INFO("=== MeshCore v0 ready ===");
 
     button_setup();
     telemetry_init();
@@ -377,14 +369,14 @@ void setup() {
         delay(1500);
     }
 
+    /* Initialize advertisement system (bloom filters for v1) */
+    advert_auto_init();
+
     radio_ok = (radio_init() == 0);
-    if (!radio_ok) {
-        Serial.println("FATAL: Radio init failed");
-        Serial.println("Serial CLI still available for debugging");
-        // DON'T hang - allow serial CLI to work for debugging
-    } else {
-        Serial.println("Radio init OK");
-        radio()->startReceive();
+    if (radio_ok) {
+        int rx_state = radio()->startReceive();
+        DEBUG_INFOF("startReceive() returned: %d (ISR attached, DIO0=%d, DIO1=%d)",
+                    rx_state, board->radio_pins.dio0, board->radio_pins.dio1);
         send_advertisement(ROUTE_DIRECT);  /* Initial local advertisement */
     }
 
@@ -392,17 +384,7 @@ void setup() {
     /* Initialize BLE UART service for wireless serial access */
     char ble_name[32];
     snprintf(ble_name, sizeof(ble_name), "meshgrid-%02X", mesh.our_hash);
-    if (ble_serial_init(ble_name) == 0) {
-        SerialOutput.print("BLE UART service: ");
-        Serial.println(ble_name);
-    }
-#endif
-
-    Serial.println("\nReady! Type /help for commands.\n");
-#ifdef ENABLE_BLE
-    Serial.println("Connect via USB Serial or Bluetooth (BLE UART)");
-#else
-    Serial.println("Connect via USB Serial");
+    ble_serial_init(ble_name);
 #endif
 }
 
@@ -410,18 +392,15 @@ void loop() {
     /* Radio RX handling */
     radio_loop_process();
 
+    /* MeshCore v0 processing */
+    meshcore_bridge_loop();
+
     /* Process transmission queue */
     if (radio_ok) {
         tx_queue_process();
     }
 
-    /* Debug: Print ISR trigger count every 10 seconds */
-    static uint32_t last_isr_debug = 0;
-    if (millis() - last_isr_debug > 10000) {
-        SerialOutput.print("ISR count: ");
-        Serial.println(isr_trigger_count);
-        last_isr_debug = millis();
-    }
+    /* ISR trigger count tracked internally (removed debug output) */
 
     /* Handle serial commands (USB + BLE) */
     handle_serial();
@@ -442,6 +421,13 @@ void loop() {
         telemetry_read(&telemetry);
         last_telemetry_read = millis();
         display_state.dirty = true;
+    }
+
+    /* Prune stale neighbors every 60 seconds */
+    static uint32_t last_neighbor_prune = 0;
+    if (millis() - last_neighbor_prune > 60000) {
+        neighbors_prune_stale();
+        last_neighbor_prune = millis();
     }
 
     /* Update display every 500ms */

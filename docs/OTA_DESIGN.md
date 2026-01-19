@@ -272,7 +272,7 @@ When OTA_STATE_READY:
 bool ota_verify_manifest(struct ota_manifest *m) {
     // Step 1: Verify signer is trusted
     if (memcmp(m->signing_pubkey, OTA_RELEASE_PUBKEY, 32) != 0) {
-        log_event("OTA: Unauthorized signer - rejecting");
+        DEBUG_WARN("OTA: Unauthorized signer - rejecting");
         return false;
     }
 
@@ -286,11 +286,11 @@ bool ota_verify_manifest(struct ota_manifest *m) {
 
     // Step 3: Verify Ed25519 signature (constant-time)
     if (!crypto_verify(m->signature, payload, 74, m->signing_pubkey)) {
-        log_event("OTA: Invalid signature - rejecting");
+        DEBUG_WARN("OTA: Invalid signature - rejecting");
         return false;
     }
 
-    log_event("OTA: Manifest verified OK");
+    DEBUG_WARN("OTA: Manifest verified OK");
     return true;
 }
 ```
@@ -616,7 +616,7 @@ void ota_resume_from_nvs() {
 
     prefs.end();
 
-    log_event("OTA: Resuming session " + String(ota_session.session_id, HEX));
+    DEBUG_WARN("OTA: Resuming session " + String(ota_session.session_id, HEX));
 }
 ```
 

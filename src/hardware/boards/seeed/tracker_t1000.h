@@ -65,6 +65,7 @@ static const struct board_config seeed_tracker_config = {
         .tx_power = 22,
         .preamble_len = 8,
         .use_crc = true,
+        .sync_word = 0x12,          // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
     },
 
     .early_init = NULL,

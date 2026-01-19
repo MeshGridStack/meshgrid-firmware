@@ -5,6 +5,7 @@
 #include "protocol.h"
 #include <string.h>
 #include <stddef.h>
+#include <stdio.h>
 
 /*
  * Compute 1-byte hash from public key (MeshCore compatible)
@@ -57,16 +58,16 @@ int meshgrid_packet_encode(const struct meshgrid_packet *pkt, uint8_t *buf, size
     }
 
     /* Path length */
-    if (i + 1 > buf_len) return -1;
+    if (i + 1 > buf_len) return -2;
     buf[i++] = pkt->path_len;
 
     /* Path */
-    if (i + pkt->path_len > buf_len) return -1;
+    if (i + pkt->path_len > buf_len) return -3;
     memcpy(&buf[i], pkt->path, pkt->path_len);
     i += pkt->path_len;
 
     /* Payload */
-    if (i + pkt->payload_len > buf_len) return -1;
+    if (i + pkt->payload_len > buf_len) return -6;
     memcpy(&buf[i], pkt->payload, pkt->payload_len);
     i += pkt->payload_len;
 
@@ -337,10 +338,16 @@ int meshgrid_parse_advert(const struct meshgrid_packet *pkt,
         /* Copy and ensure null termination */
         if (name_len > 0) {
             memcpy(name, &pkt->payload[i], name_len);
-            /* Strip any non-printable trailing bytes (defensive cleanup) */
-            while (name_len > 0 && (name[name_len-1] < 32 || name[name_len-1] > 126)) {
-                name_len--;
+
+            /* Sanitize ALL control characters (not just trailing) */
+            size_t write_pos = 0;
+            for (size_t read_pos = 0; read_pos < name_len; read_pos++) {
+                /* Only keep printable ASCII characters (32-126) */
+                if (name[read_pos] >= 32 && name[read_pos] <= 126) {
+                    name[write_pos++] = name[read_pos];
+                }
             }
+            name_len = write_pos;
         }
         name[name_len] = '\0';
     } else {

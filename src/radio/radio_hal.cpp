@@ -3,7 +3,7 @@
  */
 
 #include "radio_hal.h"
-#include "utils/serial_output.h"
+#include "utils/debug.h"
 #include "hardware/board.h"
 #include <Arduino.h>
 
@@ -29,11 +29,9 @@ int radio_hal_init(struct radio_instance *radio_inst,
             SX1262 *sx1262 = new SX1262(mod);
             radio_inst->sx1262 = sx1262;
 
-            SerialOutput.print("SX1262 init (TCXO=");
-            SerialOutput.print(config->tcxo_voltage);
-            SerialOutput.print(", DIO2_RF_SW=");
-            SerialOutput.print(config->dio2_as_rf_switch ? "true" : "false");
-            SerialOutput.print(")... ");
+            DEBUG_INFOF("SX1262 init (TCXO=%.1f, DIO2_RF_SW=%s, sync=0x%02X)...",
+                        config->tcxo_voltage, config->dio2_as_rf_switch ? "true" : "false",
+                        config->sync_word ? config->sync_word : RADIOLIB_SX126X_SYNC_WORD_PRIVATE);
 
             /* SX126x::begin(freq, bw, sf, cr, syncWord, power, preamble, tcxo) */
             state = sx1262->begin(
@@ -41,7 +39,7 @@ int radio_hal_init(struct radio_instance *radio_inst,
                 config->bandwidth,
                 config->spreading_factor,
                 config->coding_rate,
-                RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
+                config->sync_word ? config->sync_word : RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
                 config->tx_power,
                 config->preamble_len,
                 config->tcxo_voltage
@@ -50,13 +48,13 @@ int radio_hal_init(struct radio_instance *radio_inst,
             /* Retry without TCXO if it fails */
             if ((state == RADIOLIB_ERR_SPI_CMD_FAILED || state == RADIOLIB_ERR_SPI_CMD_INVALID) &&
                 config->tcxo_voltage > 0) {
-                SerialOutput.print("TCXO failed, retry... ");
+                DEBUG_INFO("TCXO failed, retry...");
                 state = sx1262->begin(
                     config->frequency,
                     config->bandwidth,
                     config->spreading_factor,
                     config->coding_rate,
-                    RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
+                    config->sync_word ? config->sync_word : RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
                     config->tx_power,
                     config->preamble_len,
                     0.0
@@ -80,11 +78,14 @@ int radio_hal_init(struct radio_instance *radio_inst,
         case RADIO_SX1276:
         case RADIO_SX1278: {
             /* SX127x: cs, dio0 (interrupt), reset, dio1 */
+            DEBUG_INFOF("SX1276 pins: CS=%d DIO0=%d RST=%d DIO1=%d",
+                        pins->cs, pins->dio0, pins->reset, pins->dio1);
             mod = new Module(pins->cs, pins->dio0, pins->reset, pins->dio1, *spi);
             SX1276 *sx1276 = new SX1276(mod);
             radio_inst->sx1276 = sx1276;
 
-            SerialOutput.print("SX1276 init... ");
+            DEBUG_INFOF("SX1276 init (sync=0x%02X)...",
+                        config->sync_word ? config->sync_word : RADIOLIB_SX127X_SYNC_WORD);
 
             /* SX127x::begin(freq, bw, sf, cr, syncWord, power, preamble) */
             state = sx1276->begin(
@@ -92,29 +93,32 @@ int radio_hal_init(struct radio_instance *radio_inst,
                 config->bandwidth,
                 config->spreading_factor,
                 config->coding_rate,
-                RADIOLIB_SX127X_SYNC_WORD,
+                config->sync_word ? config->sync_word : RADIOLIB_SX127X_SYNC_WORD,
                 config->tx_power,
                 config->preamble_len
             );
 
+            DEBUG_INFOF("SX1276 begin() returned: %d", state);
             if (state == RADIOLIB_ERR_NONE) {
                 if (config->use_crc) sx1276->setCRC(1);
                 sx1276->explicitHeader();
+                DEBUG_INFO("SX1276 init SUCCESS");
+            } else {
+                DEBUG_ERRORF("SX1276 init FAILED: %d", state);
             }
             break;
         }
 
         default:
-            Serial.println("Unsupported radio type!");
+            DEBUG_INFO("Unsupported radio type!");
             return -1;
     }
 
     if (state != RADIOLIB_ERR_NONE) {
-        SerialOutput.print("FAILED: ");
-        Serial.println(state);
+        DEBUG_ERRORF("Radio init FAILED: %d", state);
         return -1;
     }
 
-    Serial.println("OK");
+    DEBUG_INFO("Radio init OK");
     return 0;
 }

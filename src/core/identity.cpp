@@ -28,7 +28,7 @@ void identity_init(void) {
         /* Load saved keypair */
         if (prefs.getBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE) == MESHGRID_PUBKEY_SIZE &&
             prefs.getBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE) == MESHGRID_PRIVKEY_SIZE) {
-            Serial.println("Loaded identity from NVS");
+            /* Loaded successfully */
         } else {
             has_identity = false;  // Load failed, regenerate
         }
@@ -37,20 +37,14 @@ void identity_init(void) {
 
     if (!has_identity) {
         /* Generate new Ed25519 keypair */
-        SerialOutput.print("Generating Ed25519 keypair... ");
-        if (crypto_generate_keypair(mesh.pubkey, mesh.privkey) == 0) {
-            Serial.println("OK");
+        crypto_generate_keypair(mesh.pubkey, mesh.privkey);
 
-            /* Save to NVS for persistence */
-            prefs.begin("meshgrid", false);  // Read-write
-            prefs.putBool("has_identity", true);
-            prefs.putBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE);
-            prefs.putBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE);
-            prefs.end();
-            Serial.println("Identity saved to NVS");
-        } else {
-            Serial.println("FAILED!");
-        }
+        /* Save to NVS for persistence */
+        prefs.begin("meshgrid", false);  // Read-write
+        prefs.putBool("has_identity", true);
+        prefs.putBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE);
+        prefs.putBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE);
+        prefs.end();
     }
 
     /* Compute hash (MeshCore uses first byte of pubkey) */
@@ -58,11 +52,4 @@ void identity_init(void) {
 
     /* Generate name from hash */
     snprintf(mesh.name, sizeof(mesh.name), "mg-%02X", mesh.our_hash);
-
-    /* Print pubkey for debugging */
-    SerialOutput.print("PubKey: ");
-    for (int i = 0; i < 8; i++) {
-        Serial.printf("%02X", mesh.pubkey[i]);
-    }
-    Serial.println("...");
 }
