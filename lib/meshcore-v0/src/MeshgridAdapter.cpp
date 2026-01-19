@@ -413,6 +413,8 @@ void MeshgridMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id,
     // Extract name from app_data (MeshCore format)
     // app_data format: [flags(1)][optional fields][name (remainder, NOT null-terminated)]
     char name[17] = {0};
+    uint8_t protocol_version = 0;  // Default to v0 (MeshCore)
+
     if (app_data_len > 0) {
         uint8_t flags = app_data[0];
         int i = 1;  // Skip flags byte
@@ -425,12 +427,18 @@ void MeshgridMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id,
         }
         debug_printf(1, "[MeshCore] app_data[%d]: %s", app_data_len, hex_dump);
 
+        // Check for v1 capability (bit 0x08 = free bit, used for v1 protocol flag)
+        if (flags & 0x08) {
+            protocol_version = 1;  // This node supports meshgrid v1
+        }
+
         // Skip optional fields based on flags
         if (flags & 0x10) i += 8;  // ADV_LATLON_MASK - lat/lon (8 bytes)
         if (flags & 0x20) i += 2;  // ADV_FEAT1_MASK - feature 1 (2 bytes)
         if (flags & 0x40) i += 2;  // ADV_FEAT2_MASK - feature 2 (2 bytes)
 
-        debug_printf(1, "[MeshCore] flags=0x%02x, name_offset=%d", flags, i);
+        debug_printf(0, "[MeshCore] ADV PARSE: flags=0x%02x, name_offset=%d, protocol_ver=%d, v1_flag=%d",
+                     flags, i, protocol_version, (flags & 0x08) ? 1 : 0);
 
         // Name is remainder of app_data (if name bit is set)
         if ((flags & 0x80) && i < app_data_len) {  // ADV_NAME_MASK
@@ -449,10 +457,10 @@ void MeshgridMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id,
     int16_t rssi = radio_adapter ? (int16_t)radio_adapter->getLastRSSI() : -120;
     int8_t snr = packet->_snr / 4; // Convert from SNR*4 to SNR
 
-    debug_printf(1, "[MeshCore] onAdvertRecv: name='%s', rssi=%d, snr=%d, hops=%d, hash=0x%02x",
-                 name, rssi, snr, hops, id.pub_key[0]);
+    debug_printf(0, "[MeshCore] onAdvertRecv: name='%s', rssi=%d, snr=%d, hops=%d, hash=0x%02x, protocol_ver=%d",
+                 name, rssi, snr, hops, id.pub_key[0], protocol_version);
 
-    callbacks->update_neighbor(id.pub_key, name, timestamp, rssi, snr, hops, 0);
+    callbacks->update_neighbor(id.pub_key, name, timestamp, rssi, snr, hops, protocol_version);
 }
 
 int MeshgridMesh::searchChannelsByHash(const uint8_t* hash, mesh::GroupChannel channels[], int max_matches) {

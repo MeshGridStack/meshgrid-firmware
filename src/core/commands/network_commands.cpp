@@ -6,6 +6,7 @@
 #include "common.h"
 #include "core/neighbors.h"
 #include "utils/constants.h"
+#include "utils/debug.h"
 #include "radio/radio_hal.h"
 #include <RadioLib.h>
 
@@ -16,6 +17,8 @@ extern "C" {
 // Use C bridge to avoid namespace conflict
 extern "C" {
     #include "core/meshcore_bridge.h"
+    #include "core/integration/meshgrid_v1_bridge.h"
+    #include "../../../lib/meshgrid-v1/src/protocol/crypto.h"
 }
 
 extern struct meshgrid_state mesh;
@@ -24,7 +27,45 @@ extern void send_advertisement(uint8_t route);
 extern void send_group_message(const char *text);
 extern uint32_t get_uptime_secs(void);
 
-#define send_text_message meshcore_bridge_send_text
+/* Global to track last send result */
+static bool last_send_used_v1 = false;
+static int last_v1_result = -999;
+
+/* Auto-select v0 or v1 protocol based on peer capability */
+static inline void send_text_message(uint8_t dest_hash, const char *text) {
+    /* Check if peer supports v1 */
+    bool supports_v1 = meshgrid_v1_peer_supports_v1(dest_hash);
+    DEBUG_INFOF("[SEND] Checking peer 0x%02x supports_v1=%d", dest_hash, supports_v1);
+
+    last_send_used_v1 = false;
+    last_v1_result = -999;
+
+    if (supports_v1) {
+        /* Try v1 - compute 2-byte hash from pubkey */
+        uint16_t dest_hash_v1 = 0;
+        for (int i = 0; i < neighbor_count; i++) {
+            if (neighbors[i].hash == dest_hash) {
+                dest_hash_v1 = meshgrid_v1_hash_pubkey(neighbors[i].pubkey);
+                DEBUG_INFOF("[SEND] Using v1 protocol: dest_hash=0x%02x, dest_hash_v1=0x%04x", dest_hash, dest_hash_v1);
+                break;
+            }
+        }
+
+        if (dest_hash_v1 != 0) {
+            last_v1_result = meshgrid_v1_send_text(dest_hash_v1, text, strlen(text));
+            if (last_v1_result == 0) {
+                DEBUG_INFO("[SEND] v1 send succeeded");
+                last_send_used_v1 = true;
+                return;  /* v1 succeeded */
+            }
+        }
+        DEBUG_WARN("[SEND] v1 send failed, falling back to v0");
+    }
+
+    /* Fall back to v0 */
+    DEBUG_INFOF("[SEND] Using v0 protocol for dest=0x%02x", dest_hash);
+    meshcore_bridge_send_text(dest_hash, text);
+}
 
 void cmd_neighbors() {
     response_print("[");
@@ -32,6 +73,8 @@ void cmd_neighbors() {
         if (i > 0) response_print(",");
         response_print("{\"node_hash\":");
         response_print(neighbors[i].hash);
+        response_print(",\"protocol_version\":");
+        response_print(neighbors[i].protocol_version);
         response_print(",\"name\":\"");
 
         /* Escape name for JSON - replace control chars and quotes */
@@ -86,6 +129,7 @@ void cmd_advert() {
 }
 
 void cmd_send(const String &args) {
+    DEBUG_INFOF("[CMD] cmd_send called with args: '%s'", args.c_str());
     String cmd_args = args;  /* Make mutable copy */
     cmd_args.trim();
 
@@ -107,11 +151,14 @@ void cmd_send(const String &args) {
                 if (strcmp(neighbors[i].name, maybe_dest.c_str()) == 0) {
                     dest_hash = neighbors[i].hash;
                     is_direct = true;
+                    DEBUG_INFOF("[CMD] Found neighbor '%s' with hash 0x%02x", maybe_dest.c_str(), dest_hash);
                     break;
                 }
             }
         }
     }
+
+    DEBUG_INFOF("[CMD] is_direct=%d, dest_hash=0x%02x", is_direct, dest_hash);
 
     if (is_direct) {
         /* Direct message to specific neighbor */
@@ -119,8 +166,23 @@ void cmd_send(const String &args) {
         message.trim();
 
         if (message.length() > 0 && message.length() <= 150) {
+            DEBUG_INFOF("[CMD] Calling send_text_message(0x%02x, '%s')", dest_hash, message.c_str());
+
+            /* Check protocol support before sending */
+            struct meshgrid_neighbor *n = neighbor_find(dest_hash);
+            bool supports_v1 = meshgrid_v1_peer_supports_v1(dest_hash);
+
             send_text_message(dest_hash, message.c_str());
-            response_println("OK");
+
+            /* Show detailed protocol info */
+            char resp[100];
+            if (n) {
+                snprintf(resp, sizeof(resp), "OK proto_ver=%d supports_v1=%d secret_valid=%d used_v1=%d v1_result=%d",
+                         n->protocol_version, supports_v1, n->secret_valid, last_send_used_v1, last_v1_result);
+            } else {
+                snprintf(resp, sizeof(resp), "OK neighbor_not_found");
+            }
+            response_println(resp);
         } else {
             response_println("ERR Message too long");
         }

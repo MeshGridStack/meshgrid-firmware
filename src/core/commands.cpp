@@ -110,6 +110,8 @@ static void process_command(const String &cmd) {
         cmd_telemetry();
     } else if (cmd == "STATS") {
         cmd_stats();
+    } else if (cmd == "TIME") {
+        cmd_time_show();
     } else if (cmd == "CONFIG") {
         cmd_config();
 

@@ -311,8 +311,8 @@ namespace MeshCoreIntegration {
             uint8_t app_data[32];
             int i = 0;
 
-            // Flags byte: 0x80 (name present) | 0x01 (chat/client type)
-            app_data[i++] = 0x81;
+            // Flags byte: 0x80 (name) | 0x08 (v1 capable) | 0x01 (chat/client)
+            app_data[i++] = 0x89;
 
             // Name (remainder, NOT null-terminated per MeshCore protocol)
             const char* name = mesh_get_name();
@@ -321,7 +321,7 @@ namespace MeshCoreIntegration {
             memcpy(&app_data[i], name, name_len);
             i += name_len;
 
-            DEBUG_INFOF("[MeshCore] Creating advert with name: %s (flags=0x81, len=%d)", name, i);
+            DEBUG_INFOF("[MeshCore] Creating advert with name: %s (flags=0x89, supports_v1=true, len=%d)", name, i);
 
             mesh::Packet* pkt = mesh_v0->createAdvert(mesh_v0->self_id, app_data, i);
             if (pkt) {

@@ -152,14 +152,68 @@ void cmd_test(const String &test_type) {
     }
 }
 
+void cmd_time_show(void) {
+    if (rtc_time.valid) {
+        uint32_t current_epoch = rtc_time.epoch_at_boot + (millis() / 1000);
+
+        /* Convert Unix epoch to date/time */
+        uint32_t days_since_1970 = current_epoch / 86400;
+        uint32_t seconds_today = current_epoch % 86400;
+
+        int hour = seconds_today / 3600;
+        int minute = (seconds_today % 3600) / 60;
+        int second = seconds_today % 60;
+
+        /* Calculate year, month, day */
+        int year = 1970;
+        uint32_t remaining_days = days_since_1970;
+
+        while (true) {
+            int days_in_year = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) ? 366 : 365;
+            if (remaining_days < days_in_year) break;
+            remaining_days -= days_in_year;
+            year++;
+        }
+
+        const uint8_t days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        int month = 0;
+        for (int m = 0; m < 12; m++) {
+            int days_this_month = days_in_month[m];
+            if (m == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))) {
+                days_this_month = 29;  /* February in leap year */
+            }
+            if (remaining_days < days_this_month) {
+                month = m + 1;
+                break;
+            }
+            remaining_days -= days_this_month;
+        }
+        int day = remaining_days + 1;
+
+        char buf[64];
+        snprintf(buf, sizeof(buf), "OK Time: %04d-%02d-%02d %02d:%02d:%02d UTC (epoch: %lu)",
+                 year, month, day, hour, minute, second, current_epoch);
+        response_println(buf);
+    } else {
+        response_println("OK Time not set");
+    }
+}
+
 void cmd_time(const String &timestr) {
     int year, month, day, hour, minute, second;
     if (sscanf(timestr.c_str(), "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) == 6) {
-        /* Convert to Unix epoch */
+        /* Convert to Unix epoch (days since 1970-01-01) */
         uint32_t days = 0;
+
+        /* Days from 1970 to 2000 */
+        days = 10957;  /* 1970-01-01 to 2000-01-01 = 30 years + 7 leap days */
+
+        /* Add days from 2000 to target year */
         for (int y = 2000; y < year; y++) {
             days += ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) ? 366 : 365;
         }
+
+        /* Add days for months in current year */
         const uint8_t days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
         for (int m = 0; m < month - 1; m++) {
             days += days_in_month[m];

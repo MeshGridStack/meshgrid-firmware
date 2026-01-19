@@ -12,6 +12,7 @@
 #include "utils/debug.h"
 #include "ui/screens.h"
 #include "radio/radio_hal.h"
+#include "integration/meshgrid_v1_bridge.h"
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <mbedtls/sha256.h>
@@ -109,7 +110,14 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
         }
     }
 
-    /* Pass MeshCore-compatible packets to MeshCore for processing */
+    /* Try v1 protocol first (if packet version=1) */
+    int v1_result = meshgrid_v1_process_packet(buf, len, rssi, snr);
+    if (v1_result == 0) {
+        /* v1 handled it successfully */
+        return;
+    }
+
+    /* Fall back to v0 (MeshCore) - handles version=0 packets */
     if (pkt.payload_type == PAYLOAD_ADVERT ||
         pkt.payload_type == PAYLOAD_TXT_MSG ||
         pkt.payload_type == PAYLOAD_GRP_TXT ||

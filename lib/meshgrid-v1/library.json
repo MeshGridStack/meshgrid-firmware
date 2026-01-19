@@ -1,0 +1,22 @@
+{
+  "name": "meshgrid-v1",
+  "version": "1.0.0",
+  "description": "meshgrid v1 protocol library - Enhanced security, Bloom filters, Trickle algorithm",
+  "keywords": "mesh, lora, protocol, encryption, p2p",
+  "authors": [
+    {
+      "name": "meshgrid team"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meshgrid/meshgrid-firmware.git"
+  },
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "build": {
+    "flags": ["-std=gnu11"],
+    "srcFilter": ["+<*>", "-<.git/>"]
+  }
+}

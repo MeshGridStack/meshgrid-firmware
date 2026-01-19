@@ -7,6 +7,7 @@
 #include "utils/constants.h"
 #include "utils/types.h"
 #include "utils/memory.h"
+#include "utils/debug.h"
 #include <mbedtls/base64.h>
 
 // Use C bridge to avoid namespace conflict
@@ -24,7 +25,24 @@ extern int custom_channel_count;
 extern void channels_save_to_nvs(void);
 extern void send_group_message(const char *text);
 
-#define send_channel_message meshcore_bridge_send_channel
+extern "C" {
+    #include "core/integration/meshgrid_v1_bridge.h"
+}
+
+/* Protocol selector for channel messages */
+static inline void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret,
+                                         const char *text, const char *channel_name) {
+    /* Try v1 first for custom channels */
+    int v1_result = meshgrid_v1_send_channel(channel_hash, text, strlen(text));
+    if (v1_result == 0) {
+        DEBUG_INFO("[CHANNEL] v1 send succeeded");
+        return;
+    }
+
+    /* Fall back to v0 */
+    DEBUG_INFO("[CHANNEL] Using v0 for channel message");
+    meshcore_bridge_send_channel(channel_hash, channel_secret, text, channel_name);
+}
 
 void cmd_channels() {
     response_print("{\"channels\":[");

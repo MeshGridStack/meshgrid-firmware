@@ -349,6 +349,8 @@ void setup() {
     meshcore_bridge_initialize();  // Initialize MeshCore v0 integration
     DEBUG_INFO("=== MeshCore v0 ready ===");
 
+    /* meshgrid v1 auto-initialized on first use */
+
     button_setup();
     telemetry_init();
     display_init(&display);
