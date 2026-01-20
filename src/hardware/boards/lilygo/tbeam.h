@@ -11,8 +11,8 @@
 
 #ifdef BOARD_LILYGO_TBEAM
 
-/* AXP192 power ops - implemented in drivers/power/power_axp192.cpp */
-extern const struct power_ops axp192_power_ops;
+/* AXP auto-detect power ops - supports both AXP192 (v1.0/1.1) and AXP2101 (v1.2) */
+extern const struct power_ops axp_auto_power_ops;
 
 static const struct board_config lilygo_tbeam_config = {
     .name = "T-Beam",
@@ -74,7 +74,7 @@ static const struct board_config lilygo_tbeam_config = {
     },
 
     .radio_ops = NULL,  /* Auto-detect from radio type */
-    .power_ops = &axp192_power_ops,
+    .power_ops = &axp_auto_power_ops,
     .gps_ops = NULL,
 
     .early_init = NULL,
