@@ -1,0 +1,37 @@
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Run PlatformIO check
+        run: |
+          pio check --skip-packages --pattern="src/**/*.cpp" --pattern="src/**/*.h" --severity=medium
+
+      - name: Check C/C++ formatting (clang-format)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+          find src -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
