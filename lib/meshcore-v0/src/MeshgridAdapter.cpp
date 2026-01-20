@@ -373,27 +373,54 @@ void MeshgridMesh::onPeerDataRecv(mesh::Packet* packet, uint8_t type, int sender
     if (packet->payload_len < 2) return;
     uint8_t sender_hash = packet->payload[1];
 
-    // Get sender name
+    // Get sender name and pubkey
     char sender_name[17] = "Unknown";
+    uint8_t sender_pubkey[32];
+    bool found_neighbor = false;
+
     if (callbacks->find_neighbor) {
         void* neighbor = callbacks->find_neighbor(sender_hash);
         if (neighbor) {
-            // Assuming neighbor struct has name field at offset 33
-            // This is fragile - would be better with proper struct access
+            // neighbor struct: pubkey(32) + hash(1) + name(17) + ...
+            memcpy(sender_pubkey, neighbor, 32);
             strncpy(sender_name, (char*)neighbor + 33, 16);
             sender_name[16] = '\0';
+            found_neighbor = true;
         }
     }
 
     // data format: [timestamp(4)][txt_type(1)][text]
     if (len < 5) return;
-    const char* text = (const char*)&data[5];
+
     uint32_t timestamp;
     memcpy(&timestamp, data, 4);
+    uint8_t txt_flags = data[4] >> 2;
+    const char* text = (const char*)&data[5];
 
     // Store message via callback
     if (type == 2 && callbacks->store_direct_message) {  // PAYLOAD_TYPE_TXT_MSG
         callbacks->store_direct_message(sender_name, sender_hash, text, timestamp);
+
+        // Send ACK back to sender (like BaseChatMesh does)
+        if (txt_flags == 0 && found_neighbor) {  // TXT_TYPE_PLAIN
+            // Calculate ACK hash (same as MeshCore)
+            uint32_t ack_hash;
+            mesh::Utils::sha256((uint8_t*)&ack_hash, 4, data, 5 + strlen(text), sender_pubkey, 32);
+
+            debug_printf(0, "[MeshCore] Sending ACK back to 0x%02x, ack_hash=0x%08lx", sender_hash, ack_hash);
+
+            // Create and send ACK packet
+            mesh::Packet* ack = createAck(ack_hash);
+            if (ack) {
+                if (packet->isRouteFlood()) {
+                    // Flood mode: send ACK via flood with delay
+                    sendFlood(ack, 100);  // 100ms delay
+                } else {
+                    // Direct mode: send ACK back on reverse path
+                    sendDirect(ack, packet->path, packet->path_len, 100);
+                }
+            }
+        }
     }
 }
 
@@ -427,18 +454,25 @@ void MeshgridMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id,
         }
         debug_printf(1, "[MeshCore] app_data[%d]: %s", app_data_len, hex_dump);
 
-        // Check for v1 capability (bit 0x08 = free bit, used for v1 protocol flag)
-        if (flags & 0x08) {
-            protocol_version = 1;  // This node supports meshgrid v1
+        // Skip optional fields based on flags and extract feat1 for v1 detection
+        if (flags & 0x10) i += 8;  // ADV_LATLON_MASK - lat/lon (8 bytes)
+
+        // Check feat1 field for v1 capability (replaces old 0x08 bit check)
+        if (flags & 0x20) {  // ADV_FEAT1_MASK - feature 1 (2 bytes)
+            if (i + 1 < app_data_len) {
+                uint16_t feat1 = app_data[i] | (app_data[i+1] << 8);
+                if (feat1 & 0x01) {
+                    protocol_version = 1;  // This node supports meshgrid v1
+                }
+                debug_printf(0, "[MeshCore] feat1=0x%04x, v1=%d", feat1, protocol_version);
+            }
+            i += 2;
         }
 
-        // Skip optional fields based on flags
-        if (flags & 0x10) i += 8;  // ADV_LATLON_MASK - lat/lon (8 bytes)
-        if (flags & 0x20) i += 2;  // ADV_FEAT1_MASK - feature 1 (2 bytes)
         if (flags & 0x40) i += 2;  // ADV_FEAT2_MASK - feature 2 (2 bytes)
 
-        debug_printf(0, "[MeshCore] ADV PARSE: flags=0x%02x, name_offset=%d, protocol_ver=%d, v1_flag=%d",
-                     flags, i, protocol_version, (flags & 0x08) ? 1 : 0);
+        debug_printf(0, "[MeshCore] ADV PARSE: flags=0x%02x, name_offset=%d, protocol_ver=%d",
+                     flags, i, protocol_version);
 
         // Name is remainder of app_data (if name bit is set)
         if ((flags & 0x80) && i < app_data_len) {  // ADV_NAME_MASK

@@ -311,8 +311,26 @@ namespace MeshCoreIntegration {
             uint8_t app_data[32];
             int i = 0;
 
-            // Flags byte: 0x80 (name) | 0x08 (v1 capable) | 0x01 (chat/client)
-            app_data[i++] = 0x89;
+            // Flags byte: 0x80 (name) | 0x20 (feat1) | 0x01 (chat/client)
+            // Use feat1 field to signal v1 capability instead of bit 0x08
+            // This fixes MeshCore app compatibility (type must be 0-4, not 9)
+#if PROTOCOL_V1_ENABLED
+            uint8_t flags = 0x80 | 0x20 | 0x01;  // 0xA1 = name + feat1 + chat
+            app_data[i++] = flags;
+
+            // feat1 field (2 bytes): bit 0 = v1 capable
+            app_data[i++] = 0x01;  // v1 capability bit
+            app_data[i++] = 0x00;  // reserved
+
+            DEBUG_INFOF("[MeshCore] Creating advert with name: %s (flags=0x%02x, feat1=0x0001, v1=yes, len=%d)",
+                        mesh_get_name(), flags, i);
+#else
+            uint8_t flags = 0x80 | 0x01;  // 0x81 = name + chat (no v1)
+            app_data[i++] = flags;
+
+            DEBUG_INFOF("[MeshCore] Creating advert with name: %s (flags=0x%02x, v1=no, len=%d)",
+                        mesh_get_name(), flags, i);
+#endif
 
             // Name (remainder, NOT null-terminated per MeshCore protocol)
             const char* name = mesh_get_name();
@@ -320,8 +338,6 @@ namespace MeshCoreIntegration {
             if (name_len > 16) name_len = 16;
             memcpy(&app_data[i], name, name_len);
             i += name_len;
-
-            DEBUG_INFOF("[MeshCore] Creating advert with name: %s (flags=0x89, supports_v1=true, len=%d)", name, i);
 
             mesh::Packet* pkt = mesh_v0->createAdvert(mesh_v0->self_id, app_data, i);
             if (pkt) {
