@@ -1,0 +1,48 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v6.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DARDUINO_TTGO_T_ECHO -DNRF52840_XXAA -DS140",
+    "f_cpu": "64000000L",
+    "hwids": [
+      [
+        "0x239A",
+        "0x8029"
+      ]
+    ],
+    "mcu": "nrf52840",
+    "softdevice": {
+      "sd_fwid": "0x00B6",
+      "sd_name": "s140",
+      "sd_version": "6.1.1"
+    },
+    "usb_product": "TTGO T-Echo",
+    "variant": "Generic"
+  },
+  "connectivity": [
+    "bluetooth",
+    "lora"
+  ],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "svd_path": "nrf52840.svd"
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "LilyGO TTGO T-Echo",
+  "upload": {
+    "maximum_ram_size": 248832,
+    "maximum_size": 815104,
+    "protocol": "nrfutil",
+    "protocols": [
+      "jlink",
+      "nrfutil"
+    ]
+  },
+  "url": "https://www.lilygo.cc/products/t-echo",
+  "vendor": "LilyGO"
+}
