@@ -8,7 +8,9 @@
 #include "hardware/board.h"
 #include "utils/constants.h"
 #include "version.h"
-#include <Preferences.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#endif
 
 extern "C" {
 #include "hardware/telemetry/telemetry.h"

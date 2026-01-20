@@ -6,8 +6,10 @@
 #include "common.h"
 #include "radio/radio_hal.h"
 #include "utils/types.h"
-#include <Preferences.h>
-#include <Esp.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#    include <Esp.h>
+#endif
 
 extern "C" {
 #include "network/protocol.h"
@@ -24,7 +26,9 @@ extern struct radio_config_t {
     bool config_saved;
 } radio_config;
 
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 extern Preferences prefs;
+#endif
 extern void config_save(void);
 
 void cmd_config_save() {
@@ -33,12 +37,16 @@ void cmd_config_save() {
 }
 
 void cmd_config_reset() {
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
     prefs.begin("meshgrid", false);
     prefs.clear();
     prefs.end();
     response_println("OK Config cleared, rebooting...");
     delay(100);
     ESP.restart();
+#else
+    response_println("ERR Config reset not supported on this platform");
+#endif
 }
 
 void cmd_set_name(const String& name) {

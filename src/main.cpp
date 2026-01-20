@@ -20,8 +20,10 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <Preferences.h>
-#include <mbedtls/base64.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#    include <mbedtls/base64.h>
+#endif
 
 /* ===== Third-Party Libraries ===== */
 #include <RadioLib.h>
@@ -138,7 +140,9 @@ struct rtc_time_t rtc_time = {false, 0};
 /*
  * Radio configuration (saved to flash)
  */
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 Preferences prefs;
+#endif
 struct radio_config_t {
     float frequency;
     float bandwidth;
@@ -256,26 +260,34 @@ volatile bool radio_interrupt_flag = false;
 volatile uint32_t isr_trigger_count = 0;
 bool radio_in_rx_mode = false;
 
-#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3)
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 void ICACHE_RAM_ATTR radio_isr(void) {
     radio_interrupt_flag = true;
     isr_trigger_count++;
     /* NOTE: Can't use Serial.print in ISR on ESP32 - causes crashes */
 }
-#else
+#elif defined(ARCH_NRF52840) || defined(ARCH_RP2040)
 void radio_isr(void) {
     radio_interrupt_flag = true;
     isr_trigger_count++;
     digitalWrite(board->power_pins.led, !digitalRead(board->power_pins.led)); // Toggle LED on interrupt
+}
+#else
+void radio_isr(void) {
+    radio_interrupt_flag = true;
+    isr_trigger_count++;
 }
 #endif
 
 static int radio_init(void) {
     const struct radio_pins* pins = &board->radio_pins;
 
-#if defined(ARCH_ESP32S3) || defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
     radio_spi = new SPIClass(HSPI);
     radio_spi->begin(pins->sck, pins->miso, pins->mosi, pins->cs);
+#elif defined(ARCH_NRF52840) || defined(ARCH_RP2040)
+    radio_spi = &SPI;
+    radio_spi->begin();
 #else
     radio_spi = &SPI;
     radio_spi->begin();

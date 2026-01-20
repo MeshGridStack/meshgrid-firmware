@@ -4,7 +4,9 @@
 
 #include "security.h"
 #include "utils/debug.h"
-#include <Preferences.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#endif
 
 /* Include local config overrides if present */
 #if __has_include("../config.local.h")
@@ -16,7 +18,9 @@
 #    define DEFAULT_SECURITY_ENABLED false /* Disabled for testing/development */
 #endif
 
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 extern Preferences prefs;
+#endif
 
 struct device_security security;
 

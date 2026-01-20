@@ -4,8 +4,10 @@
 
 #include "utils/debug.h"
 #include <Arduino.h>
-#include <Preferences.h>
-#include <mbedtls/base64.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#    include <mbedtls/base64.h>
+#endif
 #include "utils/memory.h"
 #include "utils/types.h"
 
@@ -18,6 +20,7 @@ extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 extern int custom_channel_count;
 
 void channels_save_to_nvs(void) {
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
     Preferences prefs;
     prefs.begin("channels", false); // Read-write
 
@@ -43,9 +46,13 @@ void channels_save_to_nvs(void) {
     prefs.end();
 
     DEBUG_INFOF("Saved %d channels to NVS", saved_count);
+#else
+    DEBUG_INFO("NVS not available on this platform");
+#endif
 }
 
 void channels_load_from_nvs(void) {
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
     Preferences prefs;
     prefs.begin("channels", true); // Read-only
 
@@ -84,4 +91,5 @@ void channels_load_from_nvs(void) {
     }
 
     prefs.end();
+#endif
 }

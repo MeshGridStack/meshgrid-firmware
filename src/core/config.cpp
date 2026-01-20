@@ -5,8 +5,10 @@
 #include "config.h"
 #include "utils/debug.h"
 #include <Arduino.h>
-#include <Preferences.h>
-#include <mbedtls/base64.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#    include <mbedtls/base64.h>
+#endif
 
 #include "hardware/board.h"
 
@@ -21,7 +23,9 @@ extern uint8_t public_channel_secret[32];
 extern uint8_t public_channel_hash;
 
 /* Externs from main.cpp */
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 extern Preferences prefs;
+#endif
 extern struct meshgrid_state mesh;
 extern struct radio_config_t {
     float frequency;

@@ -10,8 +10,10 @@
 #include "utils/memory.h"
 #include "utils/debug.h"
 #include "ui/screens.h"
-#include <Preferences.h>
-#include <Esp.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <Preferences.h>
+#    include <Esp.h>
+#endif
 
 #ifdef ENABLE_BLE
 #    include "hardware/bluetooth/ble_serial.h"
@@ -25,7 +27,9 @@ extern "C" {
 
 extern struct meshgrid_state mesh;
 extern enum meshgrid_device_mode device_mode;
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 extern Preferences prefs;
+#endif
 extern struct rtc_time_t rtc_time;
 extern struct display_state display_state; /* Defined in utils/types.h */
 

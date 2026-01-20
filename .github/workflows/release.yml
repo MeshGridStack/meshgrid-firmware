@@ -47,29 +47,29 @@ jobs:
           - tracksenger_big
           - pi_computer_s3
           - unphone
-          # nRF52840 boards
-          - lilygo_techo
-          - rak4631
-          - rak_wismesh_repeater
-          - rak_wismesh_tap
-          - rak_wismesh_tag
-          - rak3401_1w
-          - heltec_mesh_node_t114
-          - heltec_mesh_pocket
-          - seeed_tracker_t1000e
-          - seeed_xiao_nrf52840
-          - seeed_sensecap_solar
-          - seeed_wio_tracker_l1
-          - seeed_wio_tracker_l1_eink
-          - seeed_wio_wm1110
-          - thinknode_m1
-          - thinknode_m3
-          - nano_g2_ultra
-          - muzi_base
-          - muzi_r1_neo
-          - nomadstar_meteor_pro
-          - canary_one
-          - nrf52_promicro_diy
+          # nRF52840 boards - DISABLED (require NVS storage abstraction)
+          # - lilygo_techo
+          # - rak4631
+          # - rak_wismesh_repeater
+          # - rak_wismesh_tap
+          # - rak_wismesh_tag
+          # - rak3401_1w
+          # - heltec_mesh_node_t114
+          # - heltec_mesh_pocket
+          # - seeed_tracker_t1000e
+          # - seeed_xiao_nrf52840
+          # - seeed_sensecap_solar
+          # - seeed_wio_tracker_l1
+          # - seeed_wio_tracker_l1_eink
+          # - seeed_wio_wm1110
+          # - thinknode_m1
+          # - thinknode_m3
+          # - nano_g2_ultra
+          # - muzi_base
+          # - muzi_r1_neo
+          # - nomadstar_meteor_pro
+          # - canary_one
+          # - nrf52_promicro_diy
           # ESP32 (original) boards
           - lilygo_tbeam
           - lilygo_tlora_v21_16
@@ -84,13 +84,13 @@ jobs:
           - hydra
           # ESP32-C3 boards
           - heltec_ht62
-          # ESP32-C6 boards
-          - m5stack_unit_c6l
-          # RP2040 boards
-          - rak11310
-          - rp2040_lora
-          - rpi_pico
-          - rpi_pico_w
+          # ESP32-C6 boards - DISABLED (no Arduino framework support yet)
+          # - m5stack_unit_c6l
+          # RP2040 boards - DISABLED (board definitions not in PlatformIO registry)
+          # - rak11310
+          # - rp2040_lora
+          # - rpi_pico
+          # - rpi_pico_w
 
     steps:
       - name: Checkout code

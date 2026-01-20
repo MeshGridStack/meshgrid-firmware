@@ -15,7 +15,9 @@
 #include "integration/meshgrid_v1_bridge.h"
 #include <Arduino.h>
 #include <RadioLib.h>
-#include <mbedtls/sha256.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <mbedtls/sha256.h>
+#endif
 
 // Note: Don't include meshcore_integration.h here due to namespace conflict with 'mesh'
 // MeshCore message handling is done via callbacks

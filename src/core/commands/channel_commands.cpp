@@ -8,7 +8,9 @@
 #include "utils/types.h"
 #include "utils/memory.h"
 #include "utils/debug.h"
-#include <mbedtls/base64.h>
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
+#    include <mbedtls/base64.h>
+#endif
 
 // Use C bridge to avoid namespace conflict
 extern "C" {
@@ -84,12 +86,18 @@ void cmd_channel_join(const String& args) {
     memset(secret, 0, sizeof(secret));
 
     size_t olen = 0;
+#if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
     int ret = mbedtls_base64_decode(secret, sizeof(secret), &olen, (const unsigned char*)psk.c_str(), psk.length());
 
     if (ret != 0 || (olen != 16 && olen != 32)) {
         response_println("ERR Invalid PSK (must be 16 or 32 bytes base64-encoded)");
         return;
     }
+#else
+    // Base64 decoding not available on this platform
+    response_println("ERR Channel join not supported on this platform");
+    return;
+#endif
 
     /* Calculate channel hash */
     uint8_t hash_buf[32];
