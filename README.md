@@ -4,14 +4,7 @@ PlatformIO-based firmware for LoRa mesh networking devices with dual-protocol su
 
 ## For MeshCore Enthusiasts
 
-**meshgrid** brings enhanced security to mesh networking while maintaining full backward compatibility with MeshCore v0:
-
-- **meshgrid-cli**: New Rust-based command-line tool for device management, messaging, monitoring, and firmware flashing (70+ boards)
-- **v1 Protocol**: Enhanced security with AES-256-GCM encryption, authenticated encryption with 16-byte auth tags, replay protection via sequence numbers, and 2-byte node hashes for larger networks
-- **Automatic Protocol Selection**: Seamlessly uses v1 when both peers support it, falls back to v0 for MeshCore compatibility
-- **Full MeshCore v0 Support**: 100% wire-format compatible with existing MeshCore networks
-
-Install CLI: `cargo install --path ../meshgrid-cli`
+**meshgrid** builds on MeshCore v0 with a more secure v1 protocol (AES-256-GCM, authentication, replay protection) while staying fully compatible. We've also created **meshgrid-cli** for device management and flashing. The firmware automatically uses v1 when supported, v0 for compatibility.
 
 ## Features
 
