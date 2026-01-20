@@ -191,22 +191,6 @@ meshgrid-firmware/
     └── meshgrid-v1/            # meshgrid v1 library
 ```
 
-## Known Issues
-
-### Heltec V3 USB Freeze (ESP32-S3)
-The Heltec V3 may experience USB serial freezes after extended connections due to a known ESP32-S3 USB CDC bug. If the device becomes unresponsive:
-- Unplug and reconnect USB
-- Press the reset button
-- The device firmware continues running; only serial communication is affected
-
-This is a limitation of the ESP32-S3 USB CDC implementation in the Arduino framework.
-
-### Workaround
-For critical applications requiring 24/7 connectivity, consider:
-- Using the hardware UART instead of USB CDC
-- Adding automatic watchdog timer resets
-- Implementing periodic reconnection logic in your client application
-
 ## Troubleshooting
 
 ### Device Not Responding
