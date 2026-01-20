@@ -36,7 +36,7 @@ static uint8_t axp_read_reg(uint8_t reg)
     Wire.beginTransmission(AXP192_ADDR);
     Wire.write(reg);
     Wire.endTransmission(false);
-    Wire.requestFrom(AXP192_ADDR, (uint8_t)1);
+    Wire.requestFrom((uint8_t)AXP192_ADDR, (uint8_t)1);
     return Wire.read();
 }
 
