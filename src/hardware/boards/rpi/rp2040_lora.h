@@ -56,7 +56,7 @@ static const struct board_config rp2040_lora_config = {
     .power_pins =
         {
             .vext = -1,
-            .led = 25, // Built-in LED
+            .led = 25,      // Built-in LED
             .vbat_adc = 26, // ADC0
             .button = -1,
             .vext_active_low = false,

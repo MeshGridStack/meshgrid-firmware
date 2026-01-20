@@ -22,10 +22,10 @@ static const struct board_config rpi_pico_config = {
 
     .radio_pins =
         {
-            .mosi = 19, // GP19/SPI0_TX
-            .miso = 16, // GP16/SPI0_RX
-            .sck = 18,  // GP18/SPI0_SCK
-            .cs = 17,   // GP17/SPI0_CS
+            .mosi = 19,  // GP19/SPI0_TX
+            .miso = 16,  // GP16/SPI0_RX
+            .sck = 18,   // GP18/SPI0_SCK
+            .cs = 17,    // GP17/SPI0_CS
             .reset = 14, // GP14
             .busy = 13,  // GP13
             .dio0 = -1,
@@ -56,7 +56,7 @@ static const struct board_config rpi_pico_config = {
     .power_pins =
         {
             .vext = -1,
-            .led = 25, // Built-in LED
+            .led = 25,      // Built-in LED
             .vbat_adc = 26, // ADC0
             .button = -1,
             .vext_active_low = false,

@@ -21,7 +21,7 @@ static const struct board_config seeed_wio_tracker_l1_config = {
 
     .radio = RADIO_LR1110,
     .display = DISPLAY_NONE, // LCD not yet supported
-    .gps = GPS_NONE, // LR1110 has GNSS capabilities
+    .gps = GPS_NONE,         // LR1110 has GNSS capabilities
 
     .radio_pins =
         {

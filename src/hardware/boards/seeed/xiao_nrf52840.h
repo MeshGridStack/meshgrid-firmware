@@ -56,7 +56,7 @@ static const struct board_config seeed_xiao_nrf52840_config = {
     .power_pins =
         {
             .vext = -1,
-            .led = 26, // Built-in LED
+            .led = 26,      // Built-in LED
             .vbat_adc = 32, // AIN0
             .button = -1,
             .vext_active_low = false,

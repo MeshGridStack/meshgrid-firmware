@@ -56,7 +56,7 @@ static const struct board_config nrf52_promicro_diy_config = {
     .power_pins =
         {
             .vext = -1,
-            .led = 3, // Red LED on Pro Micro
+            .led = 3,       // Red LED on Pro Micro
             .vbat_adc = 31, // AIN7
             .button = -1,
             .vext_active_low = false,
