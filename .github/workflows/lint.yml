@@ -33,5 +33,5 @@ jobs:
       - name: Check C/C++ formatting (clang-format)
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format
-          find src -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
+          sudo apt-get install -y clang-format-14
+          find src -name "*.cpp" -o -name "*.h" | xargs clang-format-14 --dry-run --Werror
