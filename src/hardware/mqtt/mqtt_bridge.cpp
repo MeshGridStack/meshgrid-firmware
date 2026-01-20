@@ -10,15 +10,15 @@
 
 #ifdef MESHGRID_MQTT_SUPPORT
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <string.h>
-#include <stdio.h>
+#    include <Arduino.h>
+#    include <WiFi.h>
+#    include <PubSubClient.h>
+#    include <string.h>
+#    include <stdio.h>
 
 /* Maximum topic length */
-#define MAX_TOPIC_LEN 128
-#define MAX_SUBSCRIPTIONS 8
+#    define MAX_TOPIC_LEN 128
+#    define MAX_SUBSCRIPTIONS 8
 
 /* Internal state */
 static WiFiClient wifi_client;
@@ -31,24 +31,22 @@ static char topic_buffer[MAX_TOPIC_LEN];
 static struct {
     char topic[64];
     mqtt_msg_cb callback;
-    void *user_data;
+    void* user_data;
 } subscriptions[MAX_SUBSCRIPTIONS];
 static int subscription_count = 0;
 
 /* Bridge callback */
-static void (*bridge_rx_callback)(const uint8_t *packet, size_t len) = nullptr;
+static void (*bridge_rx_callback)(const uint8_t* packet, size_t len) = nullptr;
 
 /* Forward declarations */
-static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length);
-static void build_full_topic(char *buf, size_t buf_len, const char *suffix);
+static void mqtt_callback(char* topic, uint8_t* payload, unsigned int length);
+static void build_full_topic(char* buf, size_t buf_len, const char* suffix);
 
-int mqtt_init(void)
-{
+int mqtt_init(void) {
     /* Generate default client ID from MAC */
     uint8_t mac[6];
     WiFi.macAddress(mac);
-    snprintf(client_id, sizeof(client_id), "meshgrid-%02X%02X%02X",
-             mac[3], mac[4], mac[5]);
+    snprintf(client_id, sizeof(client_id), "meshgrid-%02X%02X%02X", mac[3], mac[4], mac[5]);
 
     /* Set default config if not already set */
     if (current_config.broker_host == nullptr) {
@@ -61,13 +59,12 @@ int mqtt_init(void)
 
     mqtt_client.setServer(current_config.broker_host, current_config.broker_port);
     mqtt_client.setCallback(mqtt_callback);
-    mqtt_client.setBufferSize(512);  /* Allow larger messages */
+    mqtt_client.setBufferSize(512); /* Allow larger messages */
 
     return 0;
 }
 
-void mqtt_set_config(const struct mqtt_config *config)
-{
+void mqtt_set_config(const struct mqtt_config* config) {
     memcpy(&current_config, config, sizeof(current_config));
 
     if (current_config.client_id == nullptr) {
@@ -83,8 +80,7 @@ void mqtt_set_config(const struct mqtt_config *config)
     mqtt_client.setServer(current_config.broker_host, current_config.broker_port);
 }
 
-int mqtt_connect(void)
-{
+int mqtt_connect(void) {
     if (!WiFi.isConnected()) {
         DEBUG_INFO("[MQTT] WiFi not connected");
         return -1;
@@ -97,9 +93,7 @@ int mqtt_connect(void)
 
     bool connected;
     if (current_config.username != nullptr) {
-        connected = mqtt_client.connect(current_config.client_id,
-                                         current_config.username,
-                                         current_config.password);
+        connected = mqtt_client.connect(current_config.client_id, current_config.username, current_config.password);
     } else {
         connected = mqtt_client.connect(current_config.client_id);
     }
@@ -132,8 +126,7 @@ int mqtt_connect(void)
     }
 }
 
-void mqtt_disconnect(void)
-{
+void mqtt_disconnect(void) {
     if (mqtt_client.connected()) {
         /* Publish offline status */
         char status_topic[MAX_TOPIC_LEN];
@@ -145,20 +138,17 @@ void mqtt_disconnect(void)
     }
 }
 
-bool mqtt_is_connected(void)
-{
+bool mqtt_is_connected(void) {
     return mqtt_client.connected();
 }
 
-void mqtt_loop(void)
-{
+void mqtt_loop(void) {
     if (mqtt_client.connected()) {
         mqtt_client.loop();
     }
 }
 
-int mqtt_publish(const char *topic, const uint8_t *payload, size_t len, bool retain)
-{
+int mqtt_publish(const char* topic, const uint8_t* payload, size_t len, bool retain) {
     if (!mqtt_client.connected()) {
         return -1;
     }
@@ -172,20 +162,17 @@ int mqtt_publish(const char *topic, const uint8_t *payload, size_t len, bool ret
     return -1;
 }
 
-int mqtt_publish_text(const char *topic, const char *text, bool retain)
-{
-    return mqtt_publish(topic, (const uint8_t *)text, strlen(text), retain);
+int mqtt_publish_text(const char* topic, const char* text, bool retain) {
+    return mqtt_publish(topic, (const uint8_t*)text, strlen(text), retain);
 }
 
-int mqtt_subscribe(const char *topic, mqtt_msg_cb callback, void *user_data)
-{
+int mqtt_subscribe(const char* topic, mqtt_msg_cb callback, void* user_data) {
     if (subscription_count >= MAX_SUBSCRIPTIONS) {
         return -1;
     }
 
     /* Add to subscription list */
-    strncpy(subscriptions[subscription_count].topic, topic,
-            sizeof(subscriptions[0].topic) - 1);
+    strncpy(subscriptions[subscription_count].topic, topic, sizeof(subscriptions[0].topic) - 1);
     subscriptions[subscription_count].callback = callback;
     subscriptions[subscription_count].user_data = user_data;
     subscription_count++;
@@ -200,8 +187,7 @@ int mqtt_subscribe(const char *topic, mqtt_msg_cb callback, void *user_data)
     return 0;
 }
 
-int mqtt_unsubscribe(const char *topic)
-{
+int mqtt_unsubscribe(const char* topic) {
     /* Find and remove subscription */
     for (int i = 0; i < subscription_count; i++) {
         if (strcmp(subscriptions[i].topic, topic) == 0) {
@@ -223,19 +209,16 @@ int mqtt_unsubscribe(const char *topic)
     return -1;
 }
 
-int mqtt_bridge_tx(const uint8_t *packet, size_t len)
-{
+int mqtt_bridge_tx(const uint8_t* packet, size_t len) {
     return mqtt_publish(MQTT_TOPIC_TX, packet, len, false);
 }
 
-void mqtt_bridge_set_rx_callback(void (*callback)(const uint8_t *packet, size_t len))
-{
+void mqtt_bridge_set_rx_callback(void (*callback)(const uint8_t* packet, size_t len)) {
     bridge_rx_callback = callback;
 }
 
 /* Internal callback for all MQTT messages */
-static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
-{
+static void mqtt_callback(char* topic, uint8_t* payload, unsigned int length) {
     /* Check if it's the RX topic (for bridge) */
     char rx_topic[MAX_TOPIC_LEN];
     build_full_topic(rx_topic, sizeof(rx_topic), MQTT_TOPIC_RX);
@@ -252,16 +235,14 @@ static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
 
         if (strcmp(topic, full_topic) == 0) {
             if (subscriptions[i].callback != nullptr) {
-                subscriptions[i].callback(subscriptions[i].topic, payload, length,
-                                          subscriptions[i].user_data);
+                subscriptions[i].callback(subscriptions[i].topic, payload, length, subscriptions[i].user_data);
             }
             return;
         }
     }
 }
 
-static void build_full_topic(char *buf, size_t buf_len, const char *suffix)
-{
+static void build_full_topic(char* buf, size_t buf_len, const char* suffix) {
     snprintf(buf, buf_len, "%s%s", current_config.topic_prefix, suffix);
 }
 
@@ -269,39 +250,49 @@ static void build_full_topic(char *buf, size_t buf_len, const char *suffix)
 
 /* Stub implementations when MQTT support is disabled */
 
-int mqtt_init(void) { return -1; }
-void mqtt_set_config(const struct mqtt_config *config) { (void)config; }
-int mqtt_connect(void) { return -1; }
+int mqtt_init(void) {
+    return -1;
+}
+void mqtt_set_config(const struct mqtt_config* config) {
+    (void)config;
+}
+int mqtt_connect(void) {
+    return -1;
+}
 void mqtt_disconnect(void) {}
-bool mqtt_is_connected(void) { return false; }
+bool mqtt_is_connected(void) {
+    return false;
+}
 void mqtt_loop(void) {}
-int mqtt_publish(const char *topic, const uint8_t *payload, size_t len, bool retain)
-{
-    (void)topic; (void)payload; (void)len; (void)retain;
+int mqtt_publish(const char* topic, const uint8_t* payload, size_t len, bool retain) {
+    (void)topic;
+    (void)payload;
+    (void)len;
+    (void)retain;
     return -1;
 }
-int mqtt_publish_text(const char *topic, const char *text, bool retain)
-{
-    (void)topic; (void)text; (void)retain;
+int mqtt_publish_text(const char* topic, const char* text, bool retain) {
+    (void)topic;
+    (void)text;
+    (void)retain;
     return -1;
 }
-int mqtt_subscribe(const char *topic, mqtt_msg_cb callback, void *user_data)
-{
-    (void)topic; (void)callback; (void)user_data;
+int mqtt_subscribe(const char* topic, mqtt_msg_cb callback, void* user_data) {
+    (void)topic;
+    (void)callback;
+    (void)user_data;
     return -1;
 }
-int mqtt_unsubscribe(const char *topic)
-{
+int mqtt_unsubscribe(const char* topic) {
     (void)topic;
     return -1;
 }
-int mqtt_bridge_tx(const uint8_t *packet, size_t len)
-{
-    (void)packet; (void)len;
+int mqtt_bridge_tx(const uint8_t* packet, size_t len) {
+    (void)packet;
+    (void)len;
     return -1;
 }
-void mqtt_bridge_set_rx_callback(void (*callback)(const uint8_t *packet, size_t len))
-{
+void mqtt_bridge_set_rx_callback(void (*callback)(const uint8_t* packet, size_t len)) {
     (void)callback;
 }
 

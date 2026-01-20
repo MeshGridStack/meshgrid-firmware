@@ -8,12 +8,12 @@
 
 /* Include local config overrides if present */
 #if __has_include("../config.local.h")
-#include "../config.local.h"
+#    include "../config.local.h"
 #endif
 
 /* Default security setting (can be overridden in config.local.h) */
 #ifndef DEFAULT_SECURITY_ENABLED
-#define DEFAULT_SECURITY_ENABLED false  /* Disabled for testing/development */
+#    define DEFAULT_SECURITY_ENABLED false /* Disabled for testing/development */
 #endif
 
 extern Preferences prefs;
@@ -23,7 +23,7 @@ struct device_security security;
 /**
  * Check if string is all digits
  */
-static bool is_numeric(const char *str) {
+static bool is_numeric(const char* str) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (str[i] < '0' || str[i] > '9') {
             return false;
@@ -33,7 +33,7 @@ static bool is_numeric(const char *str) {
 }
 
 void security_init(void) {
-    prefs.begin("security", true);  // Read-only
+    prefs.begin("security", true); // Read-only
 
     // Load PIN enabled state (default from config.local.h or true)
     security.pin_enabled = prefs.getBool("pin_enabled", DEFAULT_SECURITY_ENABLED);
@@ -50,7 +50,7 @@ void security_init(void) {
 
         // Save to NVS
         prefs.end();
-        prefs.begin("security", false);  // Read-write
+        prefs.begin("security", false); // Read-write
         prefs.putString("pin", security.pin);
         prefs.putBool("pin_enabled", DEFAULT_SECURITY_ENABLED);
         prefs.end();
@@ -85,7 +85,7 @@ bool security_check_auth(void) {
     return security.authenticated;
 }
 
-bool security_authenticate(const char *pin) {
+bool security_authenticate(const char* pin) {
     // Check lockout first
     if (security_is_locked()) {
         uint32_t remaining = (security.lockout_until - millis()) / 1000;
@@ -127,7 +127,7 @@ bool security_is_locked(void) {
     return false;
 }
 
-bool security_set_pin(const char *new_pin) {
+bool security_set_pin(const char* new_pin) {
     // Validate PIN format
     if (strlen(new_pin) != 6) {
         DEBUG_INFO("ERROR: PIN must be exactly 6 digits");

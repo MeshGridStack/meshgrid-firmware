@@ -22,11 +22,11 @@ void cmd_ble();
 #endif
 
 /* Slash commands */
-void cmd_mode(const String &mode);
-void cmd_test(const String &test_type);
+void cmd_mode(const String& mode);
+void cmd_test(const String& test_type);
 void cmd_time_show(void);
-void cmd_time(const String &timestr);
-void cmd_pin(const String &subcmd);
+void cmd_time(const String& timestr);
+void cmd_pin(const String& subcmd);
 
 #ifdef __cplusplus
 }

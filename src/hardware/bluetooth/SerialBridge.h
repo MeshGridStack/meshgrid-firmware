@@ -18,12 +18,12 @@ class SerialBridgeClass : public Print {
 public:
     /* Print interface - required */
     virtual size_t write(uint8_t c);
-    virtual size_t write(const uint8_t *buffer, size_t size);
+    virtual size_t write(const uint8_t* buffer, size_t size);
 
     /* Convenience methods (inherited from Print) */
-    using Print::write; // pull in write(str) and write(buf, size)
     using Print::print;
     using Print::println;
+    using Print::write; // pull in write(str) and write(buf, size)
 
     /* Input methods - read from USB or BLE */
     int available();

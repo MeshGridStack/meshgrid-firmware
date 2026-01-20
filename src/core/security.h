@@ -11,11 +11,11 @@
  * Security state
  */
 struct device_security {
-    char pin[7];              // 6 digits + null terminator
-    bool pin_enabled;         // Enable/disable PIN requirement
-    bool authenticated;       // Current session authenticated
-    uint8_t failed_attempts;  // Failed auth attempts
-    uint32_t lockout_until;   // Timestamp for lockout end
+    char pin[7];             // 6 digits + null terminator
+    bool pin_enabled;        // Enable/disable PIN requirement
+    bool authenticated;      // Current session authenticated
+    uint8_t failed_attempts; // Failed auth attempts
+    uint32_t lockout_until;  // Timestamp for lockout end
 };
 
 extern struct device_security security;
@@ -37,7 +37,7 @@ bool security_check_auth(void);
  * Authenticate with PIN
  * Returns true if successful
  */
-bool security_authenticate(const char *pin);
+bool security_authenticate(const char* pin);
 
 /**
  * Check if currently in lockout period
@@ -47,7 +47,7 @@ bool security_is_locked(void);
 /**
  * Set new PIN (requires authentication)
  */
-bool security_set_pin(const char *new_pin);
+bool security_set_pin(const char* new_pin);
 
 /**
  * Disable PIN requirement (requires authentication)

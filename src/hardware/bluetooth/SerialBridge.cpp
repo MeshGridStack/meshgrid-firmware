@@ -19,7 +19,7 @@ size_t SerialBridgeClass::write(uint8_t c) {
     return written;
 }
 
-size_t SerialBridgeClass::write(const uint8_t *buffer, size_t size) {
+size_t SerialBridgeClass::write(const uint8_t* buffer, size_t size) {
     /* Always write to USB Serial */
     size_t written = Serial.write(buffer, size);
 
@@ -36,7 +36,8 @@ size_t SerialBridgeClass::write(const uint8_t *buffer, size_t size) {
 int SerialBridgeClass::available() {
     /* Check USB Serial first */
     int usb = Serial.available();
-    if (usb > 0) return usb;
+    if (usb > 0)
+        return usb;
 
 #ifdef ENABLE_BLE
     /* Then check BLE Serial */

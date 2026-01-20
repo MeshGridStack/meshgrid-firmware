@@ -27,8 +27,8 @@ void radio_loop_process(void) {
 
     /* Handle received packet if interrupt fired */
     if (radio_interrupt_flag) {
-        radio_interrupt_flag = false;  /* Reset flag */
-        radio_in_rx_mode = false;      /* No longer in RX after interrupt */
+        radio_interrupt_flag = false; /* Reset flag */
+        radio_in_rx_mode = false;     /* No longer in RX after interrupt */
 
         uint8_t rx_buf[MESHGRID_MAX_PACKET_SIZE];
         int len = get_radio()->getPacketLength();
@@ -54,13 +54,13 @@ void radio_loop_process(void) {
         if (state == RADIOLIB_ERR_NONE) {
             radio_in_rx_mode = true;
             static uint32_t last_ok_log = 0;
-            if (millis() - last_ok_log > 5000) {  /* Log success periodically */
+            if (millis() - last_ok_log > 5000) { /* Log success periodically */
                 DEBUG_INFOF("[RX] In RX mode, ISR count=%lu", isr_trigger_count);
                 last_ok_log = millis();
             }
         } else {
             static uint32_t last_error_log = 0;
-            if (millis() - last_error_log > 1000) {  /* Rate limit error logging */
+            if (millis() - last_error_log > 1000) { /* Rate limit error logging */
                 DEBUG_ERRORF("[RX] startReceive() failed: %d", state);
                 last_error_log = millis();
             }

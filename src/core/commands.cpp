@@ -23,7 +23,7 @@ static size_t cobs_rx_len = 0;
 static uint8_t cobs_decode_buf[256];
 
 /* Forward declarations */
-static void process_command(const String &cmd);
+static void process_command(const String& cmd);
 
 void serial_commands_init(void) {
     /* Clear any garbage from serial buffer on boot */
@@ -70,8 +70,9 @@ void handle_serial(void) {
 }
 
 /* Process a decoded command */
-static void process_command(const String &cmd) {
-    if (cmd.length() == 0) return;
+static void process_command(const String& cmd) {
+    if (cmd.length() == 0)
+        return;
 
     /* PING command (always allowed) */
     if (cmd == "PING") {
@@ -115,7 +116,7 @@ static void process_command(const String &cmd) {
     } else if (cmd == "CONFIG") {
         cmd_config();
 
-    /* === NETWORK COMMANDS === */
+        /* === NETWORK COMMANDS === */
     } else if (cmd == "NEIGHBORS") {
         cmd_neighbors();
     } else if (cmd.startsWith("ADVERT")) {
@@ -125,18 +126,18 @@ static void process_command(const String &cmd) {
         } else if (cmd == "ADVERT FLOOD") {
             cmd_advert_flood();
         } else if (cmd == "ADVERT") {
-            cmd_advert();  /* Default: send flood */
+            cmd_advert(); /* Default: send flood */
         } else {
             response_println("ERR Unknown ADVERT command");
         }
 
-    /* === MESSAGE COMMANDS === */
+        /* === MESSAGE COMMANDS === */
     } else if (cmd == "MESSAGES" || cmd == "INBOX") {
         cmd_messages();
     } else if (cmd == "MESSAGES CLEAR") {
         cmd_messages_clear();
 
-    /* === CHANNEL COMMANDS === */
+        /* === CHANNEL COMMANDS === */
     } else if (cmd == "CHANNELS") {
         cmd_channels();
     } else if (cmd.startsWith("CHANNEL JOIN ")) {
@@ -144,7 +145,7 @@ static void process_command(const String &cmd) {
     } else if (cmd.startsWith("CHANNEL SEND ")) {
         cmd_channel_send(cmd.substring(13));
 
-    /* === CONFIG COMMANDS === */
+        /* === CONFIG COMMANDS === */
     } else if (cmd == "CONFIG SAVE") {
         cmd_config_save();
     } else if (cmd == "CONFIG RESET") {
@@ -180,7 +181,7 @@ static void process_command(const String &cmd) {
     } else if (cmd == "SET PRESET LONG_RANGE") {
         cmd_set_preset("LONG_RANGE");
 
-    /* === SEND COMMANDS === */
+        /* === SEND COMMANDS === */
     } else if (cmd.startsWith("SEND GROUP ")) {
         cmd_send_group(cmd.substring(11));
     } else if (cmd.startsWith("SEND ")) {
@@ -188,7 +189,7 @@ static void process_command(const String &cmd) {
     } else if (cmd.startsWith("TRACE ")) {
         cmd_trace(cmd.substring(6));
 
-    /* === SYSTEM COMMANDS === */
+        /* === SYSTEM COMMANDS === */
     } else if (cmd == "REBOOT") {
         cmd_reboot();
     } else if (cmd == "IDENTITY ROTATE") {
@@ -201,7 +202,7 @@ static void process_command(const String &cmd) {
         cmd_ble();
 #endif
 
-    /* === SLASH COMMANDS === */
+        /* === SLASH COMMANDS === */
     } else if (cmd.startsWith("/mode ")) {
         cmd_mode(cmd.substring(6));
     } else if (cmd.startsWith("/test ")) {

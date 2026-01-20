@@ -13,7 +13,7 @@
 
 /* Protocol selection - only V0 (MeshCore compatible) enabled */
 #ifndef PROTOCOL_V0_ENABLED
-  #define PROTOCOL_V0_ENABLED 1
+#    define PROTOCOL_V0_ENABLED 1
 #endif
 
 /**
@@ -34,8 +34,8 @@ struct message_entry {
     bool decrypted;
     uint8_t sender_hash;
     char sender_name[17];
-    uint8_t channel_hash;  /* 0 for direct message */
-    uint8_t protocol_version;  /* 0=v0 (MeshCore), 1=v1 (meshgrid enhanced) */
+    uint8_t channel_hash;     /* 0 for direct message */
+    uint8_t protocol_version; /* 0=v0 (MeshCore), 1=v1 (meshgrid enhanced) */
     uint32_t timestamp;
     char text[128];
 };

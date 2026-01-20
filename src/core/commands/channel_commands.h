@@ -13,8 +13,8 @@ extern "C" {
 #endif
 
 void cmd_channels();
-void cmd_channel_join(const String &args);
-void cmd_channel_send(const String &args);
+void cmd_channel_join(const String& args);
+void cmd_channel_send(const String& args);
 
 #ifdef __cplusplus
 }

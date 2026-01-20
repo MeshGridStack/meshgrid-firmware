@@ -42,40 +42,37 @@ struct hw_test_result {
 /**
  * Test callbacks for progress reporting
  */
-typedef void (*hw_test_progress_cb)(const char *status, uint8_t percent);
+typedef void (*hw_test_progress_cb)(const char* status, uint8_t percent);
 
 /**
  * Battery drain test
  * Measures battery voltage drop over specified duration under load
  * Duration: milliseconds (default 60000 = 1 minute)
  */
-int hw_test_battery(struct hw_test_result *result, uint32_t duration_ms,
-                    hw_test_progress_cb progress);
+int hw_test_battery(struct hw_test_result* result, uint32_t duration_ms, hw_test_progress_cb progress);
 
 /**
  * Solar panel test
  * Measures solar voltage and estimates charging capability
  */
-int hw_test_solar(struct hw_test_result *result, hw_test_progress_cb progress);
+int hw_test_solar(struct hw_test_result* result, hw_test_progress_cb progress);
 
 /**
  * Radio power test
  * Transmits test packets and measures power consumption
  */
-int hw_test_radio(struct hw_test_result *result, hw_test_progress_cb progress);
+int hw_test_radio(struct hw_test_result* result, hw_test_progress_cb progress);
 
 /**
  * Full hardware test suite
  * Runs all tests in sequence
  */
-int hw_test_all(struct hw_test_result *results, int max_results,
-                hw_test_progress_cb progress);
+int hw_test_all(struct hw_test_result* results, int max_results, hw_test_progress_cb progress);
 
 /**
  * Format test result for display
  */
-void hw_test_format_result(char *buf, size_t len, const struct hw_test_result *result,
-                           const char *test_name);
+void hw_test_format_result(char* buf, size_t len, const struct hw_test_result* result, const char* test_name);
 
 #ifdef __cplusplus
 }

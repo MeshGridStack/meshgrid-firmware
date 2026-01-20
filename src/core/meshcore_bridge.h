@@ -38,8 +38,8 @@ void meshcore_bridge_send_text(uint8_t dest_hash, const char* text);
 /**
  * Send channel message
  */
-void meshcore_bridge_send_channel(uint8_t channel_hash, const uint8_t* channel_secret,
-                                  const char* text, const char* channel_name);
+void meshcore_bridge_send_channel(uint8_t channel_hash, const uint8_t* channel_secret, const char* text,
+                                  const char* channel_name);
 
 /**
  * Send advertisement

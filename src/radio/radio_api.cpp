@@ -13,7 +13,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void debug_printf(int level, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void debug_printf(int level, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
 #ifdef __cplusplus
 }
 #endif
@@ -110,21 +110,21 @@ extern void radio_isr(void);
 
 /* C-style wrappers for protocol libraries to avoid vtable/struct layout issues */
 extern "C" {
-    extern volatile bool radio_interrupt_flag;
+extern volatile bool radio_interrupt_flag;
 
-    int16_t radio_transmit(uint8_t* data, size_t len) {
-        /* Simple blocking transmit - RadioLib will handle polling */
-        int16_t result = get_radio()->transmit(data, len);
-        /* Debug: Log actual return value to diagnose board differences */
-        if (result != 0) {
-            debug_printf(0, "WARN: radio_transmit returned %d (expected 0)", result);
-        }
-        return result;
+int16_t radio_transmit(uint8_t* data, size_t len) {
+    /* Simple blocking transmit - RadioLib will handle polling */
+    int16_t result = get_radio()->transmit(data, len);
+    /* Debug: Log actual return value to diagnose board differences */
+    if (result != 0) {
+        debug_printf(0, "WARN: radio_transmit returned %d (expected 0)", result);
     }
+    return result;
+}
 
-    int16_t radio_start_receive(void) {
-        return get_radio()->startReceive();
-    }
+int16_t radio_start_receive(void) {
+    return get_radio()->startReceive();
+}
 
-    // mesh_increment_tx/rx moved to core/mesh_accessor.c
+// mesh_increment_tx/rx moved to core/mesh_accessor.c
 }

@@ -10,12 +10,12 @@
 
 #ifdef ENABLE_BLE
 /* BLE enabled: Output goes to both USB and BLE */
-#include "hardware/bluetooth/SerialBridge.h"
-#define SerialOutput SerialBridge
+#    include "hardware/bluetooth/SerialBridge.h"
+#    define SerialOutput SerialBridge
 #else
 /* No BLE: Output goes to USB Serial only */
-#include <Arduino.h>
-#define SerialOutput Serial
+#    include <Arduino.h>
+#    define SerialOutput Serial
 #endif
 
 #endif // MESHGRID_SERIAL_OUTPUT_H

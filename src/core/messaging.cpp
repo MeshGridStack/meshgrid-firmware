@@ -67,7 +67,7 @@ extern bool radio_in_rx_mode;
 /* Main Packet Dispatcher                                                   */
 /* ========================================================================= */
 
-void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
+void process_packet(uint8_t* buf, int len, int16_t rssi, int8_t snr) {
     struct meshgrid_packet pkt;
 
     if (meshgrid_packet_parse(buf, len, &pkt) != 0) {
@@ -84,7 +84,7 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
 
     /* Check for duplicates */
     if (seen_check_and_add(&pkt)) {
-        return;  /* Already processed */
+        return; /* Already processed */
     }
 
     /* SECURITY: Rate limiting - extract source hash */
@@ -118,10 +118,8 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
     }
 
     /* Fall back to v0 (MeshCore) - handles version=0 packets */
-    if (pkt.payload_type == PAYLOAD_ADVERT ||
-        pkt.payload_type == PAYLOAD_TXT_MSG ||
-        pkt.payload_type == PAYLOAD_GRP_TXT ||
-        pkt.payload_type == PAYLOAD_GRP_DATA) {
+    if (pkt.payload_type == PAYLOAD_ADVERT || pkt.payload_type == PAYLOAD_TXT_MSG ||
+        pkt.payload_type == PAYLOAD_GRP_TXT || pkt.payload_type == PAYLOAD_GRP_DATA) {
         /* Pass raw packet to MeshCore for signature verification and neighbor discovery */
         meshcore_bridge_handle_packet(buf, len, rssi, snr);
     }
@@ -150,11 +148,13 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                 /* Extract trace request info (MeshCore format) */
                 uint8_t i = 0;
                 uint32_t trace_id;
-                memcpy(&trace_id, &pkt.payload[i], 4); i += 4;
+                memcpy(&trace_id, &pkt.payload[i], 4);
+                i += 4;
                 uint32_t auth_code;
-                memcpy(&auth_code, &pkt.payload[i], 4); i += 4;
+                memcpy(&auth_code, &pkt.payload[i], 4);
+                i += 4;
                 uint8_t flags = pkt.payload[i++];
-                uint8_t path_sz = flags & 0x03;  /* Lower 2 bits = hash size (0 = 1 byte) */
+                uint8_t path_sz = flags & 0x03; /* Lower 2 bits = hash size (0 = 1 byte) */
 
                 uint8_t len = pkt.payload_len - i;
                 uint8_t offset = pkt.path_len << path_sz;
@@ -168,7 +168,8 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                     response.route_type = ROUTE_FLOOD;
                     response.payload_type = PAYLOAD_PATH;
                     response.version = PAYLOAD_VER_MESHCORE;
-                    response.header = MESHGRID_MAKE_HEADER(response.route_type, response.payload_type, response.version);
+                    response.header =
+                        MESHGRID_MAKE_HEADER(response.route_type, response.payload_type, response.version);
 
                     /* SECURITY FIX: Bounds check to prevent buffer overflow */
                     if (6 + pkt.path_len > MESHGRID_MAX_PAYLOAD_SIZE) {
@@ -241,7 +242,8 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                 json += ",\"path\":[";
 
                 for (int i = 0; i < hop_count && i < 32; i++) {
-                    if (i > 0) json += ",";
+                    if (i > 0)
+                        json += ",";
                     json += "\"0x";
                     json += String(pkt.payload[5 + i], HEX);
                     json += "\"";
@@ -255,7 +257,7 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                 /* Calculate RTT if we can */
                 uint32_t now = millis();
                 uint32_t rtt = now - trace_id;
-                if (rtt < 60000) {  /* Only show if < 60 seconds */
+                if (rtt < 60000) { /* Only show if < 60 seconds */
                     json += ",\"rtt_ms\":";
                     json += String(rtt);
                 }
@@ -266,7 +268,7 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                 uint8_t encoded[512];
                 size_t encoded_len = cobs_encode(encoded, (const uint8_t*)json.c_str(), json.length());
                 Serial.write(encoded, encoded_len);
-                Serial.write((uint8_t)0);  /* COBS frame delimiter */
+                Serial.write((uint8_t)0); /* COBS frame delimiter */
                 Serial.flush();
 
                 DEBUG_INFOF("TRACE response: %d hops", hop_count);
@@ -286,7 +288,8 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
 
         /* Priority: longer paths get HIGHER priority (lower number) */
         uint8_t priority = (pkt.path_len > 0) ? (10 - pkt.path_len) : 10;
-        if (priority < 1) priority = 1;  /* Clamp to minimum */
+        if (priority < 1)
+            priority = 1; /* Clamp to minimum */
 
         /* Re-encode packet */
         uint8_t tx_buf[MESHGRID_MAX_PACKET_SIZE];
@@ -299,15 +302,23 @@ void process_packet(uint8_t *buf, int len, int16_t rssi, int8_t snr) {
                 mesh.packets_fwd++;
                 stat_flood_fwd++;
 
-                const char *type_name = "PKT";
+                const char* type_name = "PKT";
                 switch (pkt.payload_type) {
-                    case PAYLOAD_ADVERT: type_name = "ADV"; break;
-                    case PAYLOAD_TXT_MSG: type_name = "MSG"; break;
-                    case PAYLOAD_GRP_TXT: type_name = "GRP"; break;
-                    case PAYLOAD_GRP_DATA: type_name = "DAT"; break;
+                    case PAYLOAD_ADVERT:
+                        type_name = "ADV";
+                        break;
+                    case PAYLOAD_TXT_MSG:
+                        type_name = "MSG";
+                        break;
+                    case PAYLOAD_GRP_TXT:
+                        type_name = "GRP";
+                        break;
+                    case PAYLOAD_GRP_DATA:
+                        type_name = "DAT";
+                        break;
                 }
-                DEBUG_INFOF("QUEUE %s len=%d payload=%d hops:%d delay:%dms prio:%d",
-                           type_name, tx_len, pkt.payload_len, pkt.path_len, delay_ms, priority);
+                DEBUG_INFOF("QUEUE %s len=%d payload=%d hops:%d delay:%dms prio:%d", type_name, tx_len, pkt.payload_len,
+                            pkt.path_len, delay_ms, priority);
             }
             /* If queue full, tx_queue_add() logs error */
         }

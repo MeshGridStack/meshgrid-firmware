@@ -14,7 +14,7 @@
 #include <Esp.h>
 
 #ifdef ENABLE_BLE
-#include "hardware/bluetooth/ble_serial.h"
+#    include "hardware/bluetooth/ble_serial.h"
 #endif
 
 extern "C" {
@@ -27,7 +27,7 @@ extern struct meshgrid_state mesh;
 extern enum meshgrid_device_mode device_mode;
 extern Preferences prefs;
 extern struct rtc_time_t rtc_time;
-extern struct display_state display_state;  /* Defined in utils/types.h */
+extern struct display_state display_state; /* Defined in utils/types.h */
 
 extern struct message_entry public_messages[PUBLIC_MESSAGE_BUFFER_SIZE];
 extern int public_msg_index, public_msg_count;
@@ -94,7 +94,7 @@ void cmd_ble() {
 
 /* Slash commands */
 
-void cmd_mode(const String &mode) {
+void cmd_mode(const String& mode) {
     if (mode == "repeater" || mode == "rpt") {
         device_mode = MODE_REPEATER;
         config_save();
@@ -109,7 +109,7 @@ void cmd_mode(const String &mode) {
     display_state.dirty = true;
 }
 
-void cmd_test(const String &test_type) {
+void cmd_test(const String& test_type) {
     if (test_type == "debug") {
         response_println("OK");
         DEBUG_ERROR("Test ERROR message");
@@ -120,8 +120,10 @@ void cmd_test(const String &test_type) {
     } else if (test_type == "battery" || test_type == "bat") {
         response_println("Starting battery drain test (1 minute)...");
         struct hw_test_result result;
-        hw_test_battery(&result, 60000, [](const char *status, uint8_t pct) {
-            response_print("  ["); response_print(pct); response_print("%] ");
+        hw_test_battery(&result, 60000, [](const char* status, uint8_t pct) {
+            response_print("  [");
+            response_print(pct);
+            response_print("%] ");
             response_println(status);
         });
         char buf[256];
@@ -130,8 +132,10 @@ void cmd_test(const String &test_type) {
     } else if (test_type == "solar") {
         response_println("Starting solar panel test...");
         struct hw_test_result result;
-        hw_test_solar(&result, [](const char *status, uint8_t pct) {
-            response_print("  ["); response_print(pct); response_print("%] ");
+        hw_test_solar(&result, [](const char* status, uint8_t pct) {
+            response_print("  [");
+            response_print(pct);
+            response_print("%] ");
             response_println(status);
         });
         char buf[256];
@@ -140,8 +144,10 @@ void cmd_test(const String &test_type) {
     } else if (test_type == "radio") {
         response_println("Starting radio TX test...");
         struct hw_test_result result;
-        hw_test_radio(&result, [](const char *status, uint8_t pct) {
-            response_print("  ["); response_print(pct); response_print("%] ");
+        hw_test_radio(&result, [](const char* status, uint8_t pct) {
+            response_print("  [");
+            response_print(pct);
+            response_print("%] ");
             response_println(status);
         });
         char buf[256];
@@ -170,7 +176,8 @@ void cmd_time_show(void) {
 
         while (true) {
             int days_in_year = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) ? 366 : 365;
-            if (remaining_days < days_in_year) break;
+            if (remaining_days < days_in_year)
+                break;
             remaining_days -= days_in_year;
             year++;
         }
@@ -180,7 +187,7 @@ void cmd_time_show(void) {
         for (int m = 0; m < 12; m++) {
             int days_this_month = days_in_month[m];
             if (m == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))) {
-                days_this_month = 29;  /* February in leap year */
+                days_this_month = 29; /* February in leap year */
             }
             if (remaining_days < days_this_month) {
                 month = m + 1;
@@ -191,22 +198,22 @@ void cmd_time_show(void) {
         int day = remaining_days + 1;
 
         char buf[64];
-        snprintf(buf, sizeof(buf), "OK Time: %04d-%02d-%02d %02d:%02d:%02d UTC (epoch: %lu)",
-                 year, month, day, hour, minute, second, current_epoch);
+        snprintf(buf, sizeof(buf), "OK Time: %04d-%02d-%02d %02d:%02d:%02d UTC (epoch: %lu)", year, month, day, hour,
+                 minute, second, current_epoch);
         response_println(buf);
     } else {
         response_println("OK Time not set");
     }
 }
 
-void cmd_time(const String &timestr) {
+void cmd_time(const String& timestr) {
     int year, month, day, hour, minute, second;
     if (sscanf(timestr.c_str(), "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) == 6) {
         /* Convert to Unix epoch (days since 1970-01-01) */
         uint32_t days = 0;
 
         /* Days from 1970 to 2000 */
-        days = 10957;  /* 1970-01-01 to 2000-01-01 = 30 years + 7 leap days */
+        days = 10957; /* 1970-01-01 to 2000-01-01 = 30 years + 7 leap days */
 
         /* Add days from 2000 to target year */
         for (int y = 2000; y < year; y++) {
@@ -217,7 +224,8 @@ void cmd_time(const String &timestr) {
         const uint8_t days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
         for (int m = 0; m < month - 1; m++) {
             days += days_in_month[m];
-            if (m == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))) days++;
+            if (m == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)))
+                days++;
         }
         days += day - 1;
 
@@ -237,7 +245,7 @@ void cmd_time(const String &timestr) {
     }
 }
 
-void cmd_pin(const String &subcmd) {
+void cmd_pin(const String& subcmd) {
     if (subcmd == "show") {
         response_print("PIN: ");
         response_print(security.pin);

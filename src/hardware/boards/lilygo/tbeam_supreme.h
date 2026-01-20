@@ -19,60 +19,65 @@ static const struct board_config lilygo_tbeam_supreme_config = {
     .display = DISPLAY_SSD1306_128X64,
     .gps = GPS_UBLOX,
 
-    .radio_pins = {
-        .mosi = 35,
-        .miso = 37,
-        .sck = 36,
-        .cs = 39,
-        .reset = 38,
-        .busy = 33,
-        .dio0 = -1,
-        .dio1 = 34,
-        .rxen = 21,
-        .txen = 10,
-    },
+    .radio_pins =
+        {
+            .mosi = 35,
+            .miso = 37,
+            .sck = 36,
+            .cs = 39,
+            .reset = 38,
+            .busy = 33,
+            .dio0 = -1,
+            .dio1 = 34,
+            .rxen = 21,
+            .txen = 10,
+        },
 
-    .display_pins = {
-        .sda = 17,
-        .scl = 18,
-        .reset = -1,
-        .addr = 0x3C,
-        .width = 128,
-        .height = 64,
-    },
+    .display_pins =
+        {
+            .sda = 17,
+            .scl = 18,
+            .reset = -1,
+            .addr = 0x3C,
+            .width = 128,
+            .height = 64,
+        },
 
-    .gps_pins = {
-        .rx = 9,
-        .tx = 8,
-        .pps = 6,
-        .enable = 7,
-        .baud = 38400,
-    },
+    .gps_pins =
+        {
+            .rx = 9,
+            .tx = 8,
+            .pps = 6,
+            .enable = 7,
+            .baud = 38400,
+        },
 
-    .power_pins = {
-        .vext = -1,
-        .led = 4,
-        .vbat_adc = 1,
-        .button = 0,
-        .vext_active_low = false,
-    },
+    .power_pins =
+        {
+            .vext = -1,
+            .led = 4,
+            .vbat_adc = 1,
+            .button = 0,
+            .vext_active_low = false,
+        },
 
-    .lora_defaults = {
-        .frequency = 868.0,
-        .bandwidth = 125.0,
-        .spreading_factor = 9,
-        .coding_rate = 7,
-        .tx_power = 22,
-        .preamble_len = 8,
-        .use_crc = true,
-        .sync_word = 0x12,          // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
-    },
+    .lora_defaults =
+        {
+            .frequency = 868.0,
+            .bandwidth = 125.0,
+            .spreading_factor = 9,
+            .coding_rate = 7,
+            .tx_power = 22,
+            .preamble_len = 8,
+            .use_crc = true,
+            .sync_word = 0x12, // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
+        },
 
     .early_init = NULL,
     .late_init = NULL,
 };
 
-#define CURRENT_BOARD_CONFIG lilygo_tbeam_supreme_config
+#    define CURRENT_BOARD_CONFIG lilygo_tbeam_supreme_config
 
 #endif
 #endif

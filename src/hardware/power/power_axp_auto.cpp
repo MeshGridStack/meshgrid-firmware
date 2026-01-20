@@ -14,7 +14,7 @@
 extern const struct power_ops axp2101_power_ops;
 extern const struct power_ops axp192_power_ops;
 
-static const struct power_ops *active_driver = NULL;
+static const struct power_ops* active_driver = NULL;
 
 static int axp_auto_init(void) {
     Serial.println("[AXP] Auto-detecting power chip...");

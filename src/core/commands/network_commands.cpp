@@ -16,15 +16,15 @@ extern "C" {
 
 // Use C bridge to avoid namespace conflict
 extern "C" {
-    #include "core/meshcore_bridge.h"
-    #include "core/integration/meshgrid_v1_bridge.h"
-    #include "../../../lib/meshgrid-v1/src/protocol/crypto.h"
+#include "core/meshcore_bridge.h"
+#include "core/integration/meshgrid_v1_bridge.h"
+#include "../../../lib/meshgrid-v1/src/protocol/crypto.h"
 }
 
 extern struct meshgrid_state mesh;
 extern bool radio_in_rx_mode;
 extern void send_advertisement(uint8_t route);
-extern void send_group_message(const char *text);
+extern void send_group_message(const char* text);
 extern uint32_t get_uptime_secs(void);
 
 /* Global to track last send result */
@@ -32,7 +32,7 @@ static bool last_send_used_v1 = false;
 static int last_v1_result = -999;
 
 /* Auto-select v0 or v1 protocol based on peer capability */
-static inline void send_text_message(uint8_t dest_hash, const char *text) {
+static inline void send_text_message(uint8_t dest_hash, const char* text) {
     /* Check if peer supports v1 */
     bool supports_v1 = meshgrid_v1_peer_supports_v1(dest_hash);
     DEBUG_INFOF("[SEND] Checking peer 0x%02x supports_v1=%d", dest_hash, supports_v1);
@@ -56,7 +56,7 @@ static inline void send_text_message(uint8_t dest_hash, const char *text) {
             if (last_v1_result == 0) {
                 DEBUG_INFO("[SEND] v1 send succeeded");
                 last_send_used_v1 = true;
-                return;  /* v1 succeeded */
+                return; /* v1 succeeded */
             }
         }
         DEBUG_WARN("[SEND] v1 send failed, falling back to v0");
@@ -70,7 +70,8 @@ static inline void send_text_message(uint8_t dest_hash, const char *text) {
 void cmd_neighbors() {
     response_print("[");
     for (int i = 0; i < neighbor_count; i++) {
-        if (i > 0) response_print(",");
+        if (i > 0)
+            response_print(",");
         response_print("{\"node_hash\":");
         response_print(neighbors[i].hash);
         response_print(",\"protocol_version\":");
@@ -84,7 +85,7 @@ void cmd_neighbors() {
                 response_print("\\");
                 response_print(c);
             } else if (c < 32 || c > 126) {
-                response_print(".");  /* Replace control chars with dot */
+                response_print("."); /* Replace control chars with dot */
             } else {
                 response_print(c);
             }
@@ -92,7 +93,8 @@ void cmd_neighbors() {
 
         response_print("\",\"public_key\":[");
         for (int j = 0; j < MESHGRID_PUBKEY_SIZE; j++) {
-            if (j > 0) response_print(",");
+            if (j > 0)
+                response_print(",");
             response_print(neighbors[i].pubkey[j]);
         }
         response_print("],\"rssi\":");
@@ -103,10 +105,18 @@ void cmd_neighbors() {
         response_print((millis() - neighbors[i].last_seen) / 1000);
         response_print(",\"firmware\":\"");
         switch (neighbors[i].firmware) {
-            case FW_MESHGRID: response_print("meshgrid"); break;
-            case FW_MESHCORE: response_print("meshcore"); break;
-            case FW_MESHTASTIC: response_print("meshtastic"); break;
-            default: response_print("other"); break;
+            case FW_MESHGRID:
+                response_print("meshgrid");
+                break;
+            case FW_MESHCORE:
+                response_print("meshcore");
+                break;
+            case FW_MESHTASTIC:
+                response_print("meshtastic");
+                break;
+            default:
+                response_print("other");
+                break;
         }
         response_print("\"}");
     }
@@ -128,9 +138,9 @@ void cmd_advert() {
     cmd_advert_flood();
 }
 
-void cmd_send(const String &args) {
+void cmd_send(const String& args) {
     DEBUG_INFOF("[CMD] cmd_send called with args: '%s'", args.c_str());
-    String cmd_args = args;  /* Make mutable copy */
+    String cmd_args = args; /* Make mutable copy */
     cmd_args.trim();
 
     /* Try to parse as direct message: check if first word is a known neighbor */
@@ -169,7 +179,7 @@ void cmd_send(const String &args) {
             DEBUG_INFOF("[CMD] Calling send_text_message(0x%02x, '%s')", dest_hash, message.c_str());
 
             /* Check protocol support before sending */
-            struct meshgrid_neighbor *n = neighbor_find(dest_hash);
+            struct meshgrid_neighbor* n = neighbor_find(dest_hash);
             bool supports_v1 = meshgrid_v1_peer_supports_v1(dest_hash);
 
             send_text_message(dest_hash, message.c_str());
@@ -197,7 +207,7 @@ void cmd_send(const String &args) {
     }
 }
 
-void cmd_send_group(const String &message) {
+void cmd_send_group(const String& message) {
     String msg = message;
     msg.trim();
     if (msg.length() > 0 && msg.length() <= 200) {
@@ -208,7 +218,7 @@ void cmd_send_group(const String &message) {
     }
 }
 
-void cmd_trace(const String &target) {
+void cmd_trace(const String& target) {
     String tgt = target;
     tgt.trim();
 

@@ -27,18 +27,18 @@ int serial_bridge_read(void);
  * @param data Data to write
  * @param len Length of data
  */
-void serial_bridge_write(const uint8_t *data, size_t len);
+void serial_bridge_write(const uint8_t* data, size_t len);
 
 /**
  * Print string to all connected serial outputs
  * @param str String to print
  */
-void serial_bridge_print(const char *str);
+void serial_bridge_print(const char* str);
 
 /**
  * Print string with newline to all connected serial outputs
  * @param str String to print
  */
-void serial_bridge_println(const char *str);
+void serial_bridge_println(const char* str);
 
 #endif // MESHGRID_SERIAL_BRIDGE_H

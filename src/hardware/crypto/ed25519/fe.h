@@ -3,7 +3,6 @@
 
 #include "fixedint.h"
 
-
 /*
     fe means field element.
     Here the field is \Z/(2^255-19).
@@ -12,15 +11,13 @@
     Bounds on each t[i] vary depending on context.
 */
 
-
 typedef int32_t fe[10];
-
 
 void fe_0(fe h);
 void fe_1(fe h);
 
-void fe_frombytes(fe h, const unsigned char *s);
-void fe_tobytes(unsigned char *s, const fe h);
+void fe_frombytes(fe h, const unsigned char* s);
+void fe_tobytes(unsigned char* s, const fe h);
 
 void fe_copy(fe h, const fe f);
 int fe_isnegative(const fe f);

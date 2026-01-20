@@ -9,8 +9,9 @@
 static struct button_state btn_state = {false, 0, 0};
 static struct button_config btn_config = {-1, 50, 1000, nullptr, nullptr};
 
-void button_init(const struct button_config *config) {
-    if (!config || config->pin < 0) return;
+void button_init(const struct button_config* config) {
+    if (!config || config->pin < 0)
+        return;
 
     btn_config = *config;
     btn_state.pressed = false;
@@ -20,15 +21,17 @@ void button_init(const struct button_config *config) {
     pinMode(btn_config.pin, INPUT_PULLUP);
 }
 
-void button_set_config(const struct button_config *config) {
+void button_set_config(const struct button_config* config) {
     if (config) {
         btn_config = *config;
     }
 }
 
 void button_check(void) {
-    if (btn_config.pin < 0) return;
-    if (millis() - btn_state.last_check < btn_config.debounce_ms) return;
+    if (btn_config.pin < 0)
+        return;
+    if (millis() - btn_state.last_check < btn_config.debounce_ms)
+        return;
     btn_state.last_check = millis();
 
     bool pressed = (digitalRead(btn_config.pin) == LOW);

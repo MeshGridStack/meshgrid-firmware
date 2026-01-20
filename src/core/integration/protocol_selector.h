@@ -36,7 +36,7 @@ void protocol_selector_init(void);
  *
  * @return 0 on success, -1 on error
  */
-int protocol_selector_send_text(uint8_t dest_hash, const char *text, size_t len);
+int protocol_selector_send_text(uint8_t dest_hash, const char* text, size_t len);
 
 /**
  * Send channel message (auto-select v0 or v1)
@@ -47,7 +47,7 @@ int protocol_selector_send_text(uint8_t dest_hash, const char *text, size_t len)
  *
  * @return 0 on success, -1 on error
  */
-int protocol_selector_send_channel(uint8_t channel_hash, const char *text, size_t len);
+int protocol_selector_send_channel(uint8_t channel_hash, const char* text, size_t len);
 
 /**
  * Process received packet (try v1 first, fall back to v0)
@@ -59,8 +59,7 @@ int protocol_selector_send_channel(uint8_t channel_hash, const char *text, size_
  *
  * @return 0 if handled, -1 if not recognized
  */
-int protocol_selector_process_packet(const uint8_t *packet, size_t len,
-                                      int16_t rssi, int8_t snr);
+int protocol_selector_process_packet(const uint8_t* packet, size_t len, int16_t rssi, int8_t snr);
 
 #ifdef __cplusplus
 }

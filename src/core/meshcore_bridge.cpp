@@ -26,8 +26,8 @@ void meshcore_bridge_send_text(uint8_t dest_hash, const char* text) {
     MeshCoreIntegration::send_text_message(dest_hash, text);
 }
 
-void meshcore_bridge_send_channel(uint8_t channel_hash, const uint8_t* channel_secret,
-                                  const char* text, const char* channel_name) {
+void meshcore_bridge_send_channel(uint8_t channel_hash, const uint8_t* channel_secret, const char* text,
+                                  const char* channel_name) {
     MeshCoreIntegration::send_channel_message(channel_hash, channel_secret, text, channel_name);
 }
 

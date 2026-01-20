@@ -27,7 +27,7 @@ extern struct display_state display_state;
  * Handle received advertisement packet
  * Dispatches to protocol-specific handlers (v0 or v1)
  */
-void handle_advert(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
+void handle_advert(struct meshgrid_packet* pkt, int16_t rssi, int8_t snr) {
     /* Dispatch to protocol-auto handler */
     advert_auto_receive(pkt, rssi, snr);
 

@@ -13,13 +13,13 @@
 
 /* Display screens */
 enum display_screen {
-    SCREEN_STATUS = 0,      /* Main status overview */
-    SCREEN_NEIGHBORS = 1,   /* Neighbor list */
-    SCREEN_MESSAGES = 2,    /* Message inbox */
-    SCREEN_STATS = 3,       /* Detailed statistics */
-    SCREEN_INFO = 4,        /* Device info */
-    SCREEN_RADIO = 5,       /* Radio configuration */
-    SCREEN_SECURITY = 6,    /* Security (PIN) */
+    SCREEN_STATUS = 0,    /* Main status overview */
+    SCREEN_NEIGHBORS = 1, /* Neighbor list */
+    SCREEN_MESSAGES = 2,  /* Message inbox */
+    SCREEN_STATS = 3,     /* Detailed statistics */
+    SCREEN_INFO = 4,      /* Device info */
+    SCREEN_RADIO = 5,     /* Radio configuration */
+    SCREEN_SECURITY = 6,  /* Security (PIN) */
     SCREEN_COUNT = 7
 };
 
@@ -35,22 +35,22 @@ struct display_state {
 /* Note: Enums and structs are defined in their respective modules */
 
 /* Display API */
-int display_init(Adafruit_SSD1306 **display_out);
-void display_state_init(struct display_state *state);
-void display_update(Adafruit_SSD1306 *display, struct display_state *state);
+int display_init(Adafruit_SSD1306** display_out);
+void display_state_init(struct display_state* state);
+void display_update(Adafruit_SSD1306* display, struct display_state* state);
 
 /* Screen rendering functions - called internally by display_update */
-void draw_screen_status(Adafruit_SSD1306 *display);
-void draw_screen_neighbors(Adafruit_SSD1306 *display, struct display_state *state);
-void draw_screen_messages(Adafruit_SSD1306 *display, struct display_state *state);
-void draw_screen_stats(Adafruit_SSD1306 *display);
-void draw_screen_info(Adafruit_SSD1306 *display);
-void draw_screen_radio(Adafruit_SSD1306 *display);
-void draw_screen_security(Adafruit_SSD1306 *display);
+void draw_screen_status(Adafruit_SSD1306* display);
+void draw_screen_neighbors(Adafruit_SSD1306* display, struct display_state* state);
+void draw_screen_messages(Adafruit_SSD1306* display, struct display_state* state);
+void draw_screen_stats(Adafruit_SSD1306* display);
+void draw_screen_info(Adafruit_SSD1306* display);
+void draw_screen_radio(Adafruit_SSD1306* display);
+void draw_screen_security(Adafruit_SSD1306* display);
 
 /* Navigation functions */
-void display_next_screen(struct display_state *state);
-void display_scroll_up(struct display_state *state);
-void display_scroll_down(struct display_state *state);
+void display_next_screen(struct display_state* state);
+void display_scroll_up(struct display_state* state);
+void display_scroll_down(struct display_state* state);
 
 #endif /* UI_SCREENS_H */

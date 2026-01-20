@@ -21,7 +21,7 @@ void identity_init(void) {
 
     /* Try to load identity from NVS first */
     Preferences prefs;
-    prefs.begin("meshgrid", true);  // Read-only
+    prefs.begin("meshgrid", true); // Read-only
     bool has_identity = prefs.getBool("has_identity", false);
 
     if (has_identity) {
@@ -30,7 +30,7 @@ void identity_init(void) {
             prefs.getBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE) == MESHGRID_PRIVKEY_SIZE) {
             /* Loaded successfully */
         } else {
-            has_identity = false;  // Load failed, regenerate
+            has_identity = false; // Load failed, regenerate
         }
     }
     prefs.end();
@@ -40,7 +40,7 @@ void identity_init(void) {
         crypto_generate_keypair(mesh.pubkey, mesh.privkey);
 
         /* Save to NVS for persistence */
-        prefs.begin("meshgrid", false);  // Read-write
+        prefs.begin("meshgrid", false); // Read-write
         prefs.putBool("has_identity", true);
         prefs.putBytes("pubkey", mesh.pubkey, MESHGRID_PUBKEY_SIZE);
         prefs.putBytes("privkey", mesh.privkey, MESHGRID_PRIVKEY_SIZE);

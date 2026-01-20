@@ -22,58 +22,63 @@ static const struct board_config lilygo_tbeam_config = {
     .display = DISPLAY_SSD1306_128X64,
     .gps = GPS_UBLOX,
 
-    .radio_pins = {
-        .mosi = 27,
-        .miso = 19,
-        .sck = 5,
-        .cs = 18,
-        .reset = 23,
-        .busy = -1,
-        .dio0 = 26,
-        .dio1 = 33,  // DIO1 for RX Timeout (matches MeshCore)
-        .rxen = -1,
-        .txen = -1,
-    },
+    .radio_pins =
+        {
+            .mosi = 27,
+            .miso = 19,
+            .sck = 5,
+            .cs = 18,
+            .reset = 23,
+            .busy = -1,
+            .dio0 = 26,
+            .dio1 = 33, // DIO1 for RX Timeout (matches MeshCore)
+            .rxen = -1,
+            .txen = -1,
+        },
 
-    .display_pins = {
-        .sda = 21,
-        .scl = 22,
-        .reset = -1,
-        .addr = 0x3C,
-        .width = 128,
-        .height = 64,
-    },
+    .display_pins =
+        {
+            .sda = 21,
+            .scl = 22,
+            .reset = -1,
+            .addr = 0x3C,
+            .width = 128,
+            .height = 64,
+        },
 
-    .gps_pins = {
-        .rx = 34,
-        .tx = 12,
-        .pps = -1,
-        .enable = -1,
-        .baud = 9600,
-    },
+    .gps_pins =
+        {
+            .rx = 34,
+            .tx = 12,
+            .pps = -1,
+            .enable = -1,
+            .baud = 9600,
+        },
 
-    .power_pins = {
-        .vext = -1,
-        .led = 4,
-        .vbat_adc = 35,
-        .button = 38,
-        .vext_active_low = false,
-    },
+    .power_pins =
+        {
+            .vext = -1,
+            .led = 4,
+            .vbat_adc = 35,
+            .button = 38,
+            .vext_active_low = false,
+        },
 
-    .lora_defaults = {
-        .frequency = 868.0,
-        .bandwidth = 125.0,
-        .spreading_factor = 9,
-        .coding_rate = 7,
-        .tx_power = 20,
-        .preamble_len = 8,
-        .use_crc = true,
-        .tcxo_voltage = 0.0,
-        .dio2_as_rf_switch = false,
-        .sync_word = 0x12,  // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
-    },
+    .lora_defaults =
+        {
+            .frequency = 868.0,
+            .bandwidth = 125.0,
+            .spreading_factor = 9,
+            .coding_rate = 7,
+            .tx_power = 20,
+            .preamble_len = 8,
+            .use_crc = true,
+            .tcxo_voltage = 0.0,
+            .dio2_as_rf_switch = false,
+            .sync_word = 0x12, // RADIOLIB_SX126X_SYNC_WORD_PRIVATE for MeshCore compat
+        },
 
-    .radio_ops = NULL,  /* Auto-detect from radio type */
+    .radio_ops = NULL, /* Auto-detect from radio type */
     .power_ops = &axp_auto_power_ops,
     .gps_ops = NULL,
 
@@ -81,7 +86,7 @@ static const struct board_config lilygo_tbeam_config = {
     .late_init = NULL,
 };
 
-#define CURRENT_BOARD_CONFIG lilygo_tbeam_config
+#    define CURRENT_BOARD_CONFIG lilygo_tbeam_config
 
 #endif
 #endif

@@ -27,8 +27,8 @@ extern uint8_t seen_idx;
 extern uint32_t stat_duplicates;
 
 /* Rate limiting: Track packet timestamps per source hash */
-#define RATE_LIMIT_WINDOW_MS  1000  // 1 second window
-#define RATE_LIMIT_MAX_PKTS   10    // Max 10 packets per second per source
+#define RATE_LIMIT_WINDOW_MS 1000 // 1 second window
+#define RATE_LIMIT_MAX_PKTS 10    // Max 10 packets per second per source
 
 struct rate_limit_entry {
     uint8_t source_hash;
@@ -45,7 +45,7 @@ static struct rate_limit_entry rate_limit_table[RATE_LIMIT_TABLE_SIZE];
  */
 bool rate_limit_check(uint8_t source_hash) {
     uint32_t now = millis();
-    struct rate_limit_entry *entry = NULL;
+    struct rate_limit_entry* entry = NULL;
 
     /* Find existing entry for this source */
     for (int i = 0; i < RATE_LIMIT_TABLE_SIZE; i++) {
@@ -112,7 +112,7 @@ void tx_queue_init(void) {
  * Priority based on path_len: longer paths get HIGHER priority (lower number)
  * Returns true if added, false if queue is full
  */
-bool tx_queue_add(const uint8_t *buf, int len, uint32_t delay_ms, uint8_t priority) {
+bool tx_queue_add(const uint8_t* buf, int len, uint32_t delay_ms, uint8_t priority) {
     /* Find empty slot */
     for (int i = 0; i < TX_QUEUE_SIZE; i++) {
         if (!tx_queue[i].valid) {
@@ -147,7 +147,7 @@ static uint32_t calculate_airtime_ms(int packet_len) {
  */
 uint32_t airtime_get_silence_required(void) {
     if (airtime.last_tx_ms == 0) {
-        return 0;  /* No recent transmission */
+        return 0; /* No recent transmission */
     }
     return airtime.last_tx_ms * 2;
 }
@@ -168,7 +168,7 @@ static bool airtime_check_budget(uint32_t tx_duration_ms) {
     /* Check if adding this transmission exceeds budget */
     uint32_t max_airtime = (AIRTIME_WINDOW_MS * AIRTIME_BUDGET_PCT) / 100;
     if (airtime.total_tx_ms + tx_duration_ms > max_airtime) {
-        return false;  /* Would exceed budget */
+        return false; /* Would exceed budget */
     }
 
     return true;
@@ -194,20 +194,22 @@ void tx_queue_process(void) {
     if (silence_required > 0) {
         static uint32_t last_tx_time = 0;
         if (now - last_tx_time < silence_required) {
-            return;  /* Still in silence period */
+            return; /* Still in silence period */
         }
     }
-    static uint32_t last_tx_time = 0;  /* Moved outside to persist */
+    static uint32_t last_tx_time = 0; /* Moved outside to persist */
 
     /* Find highest priority packet that's ready to send */
     int best_idx = -1;
     uint8_t best_priority = 255;
 
     for (int i = 0; i < TX_QUEUE_SIZE; i++) {
-        if (!tx_queue[i].valid) continue;
+        if (!tx_queue[i].valid)
+            continue;
 
         /* Check if scheduled time has arrived */
-        if (now < tx_queue[i].scheduled_time) continue;
+        if (now < tx_queue[i].scheduled_time)
+            continue;
 
         /* Check if higher priority */
         if (tx_queue[i].priority < best_priority) {
@@ -217,7 +219,8 @@ void tx_queue_process(void) {
     }
 
     /* No packets ready */
-    if (best_idx < 0) return;
+    if (best_idx < 0)
+        return;
 
     /* Calculate airtime for this packet */
     uint32_t tx_duration = calculate_airtime_ms(tx_queue[best_idx].len);
@@ -235,12 +238,12 @@ void tx_queue_process(void) {
 
     /* Transmit (collision avoidance via queue + random delays) */
     int16_t result = get_radio()->transmit(tx_queue[best_idx].buf, tx_queue[best_idx].len);
-    radio_in_rx_mode = false;  /* Mark as not in RX after TX */
+    radio_in_rx_mode = false; /* Mark as not in RX after TX */
     get_radio()->startReceive();
 
     /* Update statistics */
-    if (result == 0) {  /* RADIOLIB_ERR_NONE = 0 */
-        mesh.packets_tx++;  /* Increment TX counter on success */
+    if (result == 0) {     /* RADIOLIB_ERR_NONE = 0 */
+        mesh.packets_tx++; /* Increment TX counter on success */
     }
     airtime_record_tx(tx_duration);
     last_tx_time = now;
@@ -257,7 +260,7 @@ uint32_t get_uptime_secs(void) {
     return (millis() - boot_time) / 1000;
 }
 
-bool seen_check_and_add(const struct meshgrid_packet *pkt) {
+bool seen_check_and_add(const struct meshgrid_packet* pkt) {
     uint8_t hash;
     meshgrid_packet_hash(pkt, &hash);
 
@@ -265,10 +268,9 @@ bool seen_check_and_add(const struct meshgrid_packet *pkt) {
 
     /* Check if we've seen this packet recently */
     for (int i = 0; i < SEEN_TABLE_SIZE; i++) {
-        if (seen_table[i].hash == hash &&
-            (now - seen_table[i].time) < MESHGRID_DUPLICATE_WINDOW_MS) {
+        if (seen_table[i].hash == hash && (now - seen_table[i].time) < MESHGRID_DUPLICATE_WINDOW_MS) {
             stat_duplicates++;
-            return true;  /* Already seen */
+            return true; /* Already seen */
         }
     }
 
@@ -277,5 +279,5 @@ bool seen_check_and_add(const struct meshgrid_packet *pkt) {
     seen_table[seen_idx].time = now;
     seen_idx = (seen_idx + 1) % SEEN_TABLE_SIZE;
 
-    return false;  /* Not seen before */
+    return false; /* Not seen before */
 }

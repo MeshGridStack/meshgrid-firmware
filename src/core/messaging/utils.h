@@ -6,7 +6,7 @@
 
 /* TX Queue */
 void tx_queue_init(void);
-bool tx_queue_add(const uint8_t *buf, int len, uint32_t delay_ms, uint8_t priority);
+bool tx_queue_add(const uint8_t* buf, int len, uint32_t delay_ms, uint8_t priority);
 void tx_queue_process(void);
 
 /* Airtime Management */
@@ -17,7 +17,7 @@ uint8_t random_byte(void);
 uint32_t get_uptime_secs(void);
 
 /* Deduplication */
-bool seen_check_and_add(const struct meshgrid_packet *pkt);
+bool seen_check_and_add(const struct meshgrid_packet* pkt);
 
 /* Rate Limiting */
 bool rate_limit_check(uint8_t source_hash);

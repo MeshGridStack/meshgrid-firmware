@@ -34,7 +34,7 @@ extern struct radio_config_t {
 } radio_config;
 
 extern enum meshgrid_device_mode device_mode;
-extern const struct board_config *board;
+extern const struct board_config* board;
 
 /* RTC time tracking */
 struct rtc_time_t {
@@ -45,15 +45,13 @@ extern struct rtc_time_t rtc_time;
 
 #define MESHGRID_NODE_NAME_MAX 16
 
-
 void init_public_channel(void) {
     /* Decode Base64 PSK */
-    memset(public_channel_secret, 0, sizeof(public_channel_secret));  /* Zero the buffer first */
+    memset(public_channel_secret, 0, sizeof(public_channel_secret)); /* Zero the buffer first */
 
     size_t olen = 0;
-    int ret = mbedtls_base64_decode(public_channel_secret, sizeof(public_channel_secret),
-                                     &olen, (const unsigned char*)PUBLIC_CHANNEL_PSK,
-                                     strlen(PUBLIC_CHANNEL_PSK));
+    int ret = mbedtls_base64_decode(public_channel_secret, sizeof(public_channel_secret), &olen,
+                                    (const unsigned char*)PUBLIC_CHANNEL_PSK, strlen(PUBLIC_CHANNEL_PSK));
 
     if (ret == 0 && (olen == 16 || olen == 32)) {
         /* MeshCore supports both 128-bit (16 bytes) and 256-bit (32 bytes) keys */
@@ -71,7 +69,7 @@ void init_public_channel(void) {
 }
 
 void config_load(void) {
-    prefs.begin("meshgrid", true);  // Read-only
+    prefs.begin("meshgrid", true); // Read-only
     radio_config.config_saved = prefs.getBool("saved", false);
 
     if (radio_config.config_saved) {
@@ -115,7 +113,7 @@ void config_load(void) {
 }
 
 void config_save(void) {
-    prefs.begin("meshgrid", false);  // Read-write
+    prefs.begin("meshgrid", false); // Read-write
     prefs.putBool("saved", true);
     prefs.putFloat("freq", radio_config.frequency);
     prefs.putFloat("bw", radio_config.bandwidth);

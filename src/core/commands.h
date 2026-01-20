@@ -19,7 +19,7 @@ void serial_commands_init(void);
 /**
  * Handle CLI command (uppercase, MeshCore-compatible)
  */
-void handle_cli_command(const String &cmd);
+void handle_cli_command(const String& cmd);
 
 /**
  * Handle serial input

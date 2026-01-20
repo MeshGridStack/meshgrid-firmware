@@ -7,35 +7,29 @@
 #include "telemetry.h"
 #include <Arduino.h>
 
-static int generic_init(void)
-{
+static int generic_init(void) {
     return 0;
 }
 
-static uint16_t generic_read_battery_mv(void)
-{
+static uint16_t generic_read_battery_mv(void) {
     /* No battery ADC - return 0 */
     return 0;
 }
 
-static uint16_t generic_read_solar_mv(void)
-{
+static uint16_t generic_read_solar_mv(void) {
     return 0;
 }
 
-static bool generic_is_usb_power(void)
-{
+static bool generic_is_usb_power(void) {
     /* Assume USB power if we're running */
     return true;
 }
 
-static bool generic_is_charging(void)
-{
+static bool generic_is_charging(void) {
     return false;
 }
 
-static int16_t generic_read_temp(void)
-{
+static int16_t generic_read_temp(void) {
 #ifdef ESP32
     /* Use ESP32 internal temperature sensor */
     float temp = temperatureRead();
@@ -45,8 +39,7 @@ static int16_t generic_read_temp(void)
 #endif
 }
 
-static void generic_adc_enable(bool enable)
-{
+static void generic_adc_enable(bool enable) {
     (void)enable;
 }
 
@@ -62,6 +55,7 @@ static const struct telemetry_ops generic_telemetry_ops = {
 };
 
 /* Used when no specific board driver is selected */
-#if !defined(BOARD_HELTEC_V3) && !defined(BOARD_HELTEC_V4) && !defined(BOARD_LILYGO_TBEAM) && !defined(BOARD_LILYGO_TBEAM_SUPREME)
-const struct telemetry_ops *board_telemetry_ops = &generic_telemetry_ops;
+#if !defined(BOARD_HELTEC_V3) && !defined(BOARD_HELTEC_V4) && !defined(BOARD_LILYGO_TBEAM) &&                          \
+    !defined(BOARD_LILYGO_TBEAM_SUPREME)
+const struct telemetry_ops* board_telemetry_ops = &generic_telemetry_ops;
 #endif

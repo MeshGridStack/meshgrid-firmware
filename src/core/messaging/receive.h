@@ -13,7 +13,7 @@
  * Message handling is done automatically by MeshCore via callbacks */
 
 /* Advertisement handling (not protocol-specific) */
-void handle_advert(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr);
+void handle_advert(struct meshgrid_packet* pkt, int16_t rssi, int8_t snr);
 
 /*
  * Direct message and group message handlers are now handled automatically

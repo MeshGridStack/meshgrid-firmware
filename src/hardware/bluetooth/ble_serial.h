@@ -32,7 +32,7 @@ extern "C" {
  * @param device_name BLE device name (e.g., "meshgrid-12")
  * @return 0 on success, -1 on error
  */
-int ble_serial_init(const char *device_name);
+int ble_serial_init(const char* device_name);
 
 /**
  * Process BLE events
@@ -52,7 +52,7 @@ bool ble_serial_connected(void);
  * @param len Length of data
  * @return Number of bytes sent
  */
-int ble_serial_write(const uint8_t *data, size_t len);
+int ble_serial_write(const uint8_t* data, size_t len);
 
 /**
  * Get number of bytes available to read

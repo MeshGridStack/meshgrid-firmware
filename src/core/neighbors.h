@@ -14,24 +14,23 @@ extern "C" {
 
 /* Neighbor table */
 extern struct meshgrid_neighbor neighbors[MAX_NEIGHBORS];
-extern uint16_t neighbor_count;  /* uint16_t to support 512 neighbors */
+extern uint16_t neighbor_count; /* uint16_t to support 512 neighbors */
 
 /* Find neighbor by hash */
-struct meshgrid_neighbor *neighbor_find(uint8_t hash);
+struct meshgrid_neighbor* neighbor_find(uint8_t hash);
 
 /* Update or add neighbor */
-void neighbor_update(const uint8_t *pubkey, const char *name,
-                     uint32_t timestamp, int16_t rssi, int8_t snr,
+void neighbor_update(const uint8_t* pubkey, const char* name, uint32_t timestamp, int16_t rssi, int8_t snr,
                      uint8_t hops, uint8_t protocol_version);
 
 /* Get cached shared secret for neighbor (returns nullptr if not found/valid) */
-const uint8_t *neighbor_get_shared_secret(uint8_t hash);
+const uint8_t* neighbor_get_shared_secret(uint8_t hash);
 
 /* Infer node type from name */
-enum meshgrid_node_type infer_node_type(const char *name);
+enum meshgrid_node_type infer_node_type(const char* name);
 
 /* Infer firmware from name */
-enum meshgrid_firmware infer_firmware(const char *name);
+enum meshgrid_firmware infer_firmware(const char* name);
 
 /* Save neighbors to NVS (up to 10 with valid secrets) */
 void neighbors_save_to_nvs(void);

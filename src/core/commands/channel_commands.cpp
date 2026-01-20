@@ -12,7 +12,7 @@
 
 // Use C bridge to avoid namespace conflict
 extern "C" {
-    #include "core/meshcore_bridge.h"
+#include "core/meshcore_bridge.h"
 }
 
 extern "C" {
@@ -23,15 +23,15 @@ extern uint8_t public_channel_hash;
 extern struct channel_entry custom_channels[MAX_CUSTOM_CHANNELS];
 extern int custom_channel_count;
 extern void channels_save_to_nvs(void);
-extern void send_group_message(const char *text);
+extern void send_group_message(const char* text);
 
 extern "C" {
-    #include "core/integration/meshgrid_v1_bridge.h"
+#include "core/integration/meshgrid_v1_bridge.h"
 }
 
 /* Protocol selector for channel messages */
-static inline void send_channel_message(uint8_t channel_hash, const uint8_t *channel_secret,
-                                         const char *text, const char *channel_name) {
+static inline void send_channel_message(uint8_t channel_hash, const uint8_t* channel_secret, const char* text,
+                                        const char* channel_name) {
     /* Try v1 first for custom channels */
     int v1_result = meshgrid_v1_send_channel(channel_hash, text, strlen(text));
     if (v1_result == 0) {
@@ -64,7 +64,7 @@ void cmd_channels() {
     response_println("}");
 }
 
-void cmd_channel_join(const String &args) {
+void cmd_channel_join(const String& args) {
     int space = args.indexOf(' ');
     if (space < 0) {
         response_println("ERR Usage: CHANNEL JOIN <name> <psk_base64>");
@@ -84,8 +84,7 @@ void cmd_channel_join(const String &args) {
     memset(secret, 0, sizeof(secret));
 
     size_t olen = 0;
-    int ret = mbedtls_base64_decode(secret, sizeof(secret), &olen,
-                                     (const unsigned char*)psk.c_str(), psk.length());
+    int ret = mbedtls_base64_decode(secret, sizeof(secret), &olen, (const unsigned char*)psk.c_str(), psk.length());
 
     if (ret != 0 || (olen != 16 && olen != 32)) {
         response_println("ERR Invalid PSK (must be 16 or 32 bytes base64-encoded)");
@@ -114,7 +113,7 @@ void cmd_channel_join(const String &args) {
     response_println(")");
 }
 
-void cmd_channel_send(const String &args) {
+void cmd_channel_send(const String& args) {
     int space = args.indexOf(' ');
     if (space < 0) {
         response_println("ERR Usage: CHANNEL SEND <name> <text>");
@@ -132,9 +131,7 @@ void cmd_channel_send(const String &args) {
     } else {
         for (int i = 0; i < custom_channel_count; i++) {
             if (custom_channels[i].valid && strcmp(custom_channels[i].name, name.c_str()) == 0) {
-                send_channel_message(custom_channels[i].hash,
-                                     custom_channels[i].secret,
-                                     text.c_str(),
+                send_channel_message(custom_channels[i].hash, custom_channels[i].secret, text.c_str(),
                                      custom_channels[i].name);
                 found = true;
                 break;

@@ -21,7 +21,7 @@ extern "C" {
  * @param src_len Input length
  * @return Encoded length
  */
-size_t cobs_encode(uint8_t *dst, const uint8_t *src, size_t src_len);
+size_t cobs_encode(uint8_t* dst, const uint8_t* src, size_t src_len);
 
 /**
  * Decode COBS buffer
@@ -30,7 +30,7 @@ size_t cobs_encode(uint8_t *dst, const uint8_t *src, size_t src_len);
  * @param src_len Encoded length
  * @return Decoded length, or 0 on error
  */
-size_t cobs_decode(uint8_t *dst, const uint8_t *src, size_t src_len);
+size_t cobs_decode(uint8_t* dst, const uint8_t* src, size_t src_len);
 
 #ifdef __cplusplus
 }

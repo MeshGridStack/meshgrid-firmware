@@ -14,14 +14,14 @@
 #include <string.h>
 
 extern "C" {
-    /* v1 protocol headers */
-    #include "../../../lib/meshgrid-v1/src/protocol/crypto.h"
-    #include "../../../lib/meshgrid-v1/src/protocol/packet.h"
-    #include "../../../lib/meshgrid-v1/src/discovery/bloom.h"
-    #include "../../../lib/meshgrid-v1/src/discovery/trickle.h"
+/* v1 protocol headers */
+#include "../../../lib/meshgrid-v1/src/protocol/crypto.h"
+#include "../../../lib/meshgrid-v1/src/protocol/packet.h"
+#include "../../../lib/meshgrid-v1/src/discovery/bloom.h"
+#include "../../../lib/meshgrid-v1/src/discovery/trickle.h"
 
-    /* Radio function */
-    int16_t radio_transmit(uint8_t* data, size_t len);
+/* Radio function */
+int16_t radio_transmit(uint8_t* data, size_t len);
 }
 
 /* External from main.cpp */
@@ -33,7 +33,7 @@ static inline uint32_t get_current_timestamp(void) {
     if (rtc_time.valid) {
         return rtc_time.epoch_at_boot + (millis() / 1000);
     }
-    return millis() / 1000;  /* Fallback to uptime */
+    return millis() / 1000; /* Fallback to uptime */
 }
 
 /* External message storage */
@@ -57,29 +57,29 @@ void meshgrid_v1_bridge_init(void) {
  * Check if neighbor supports v1 protocol
  */
 bool meshgrid_v1_peer_supports_v1(uint8_t hash) {
-    struct meshgrid_neighbor *neighbor = neighbor_find(hash);
+    struct meshgrid_neighbor* neighbor = neighbor_find(hash);
     if (neighbor == nullptr) {
         DEBUG_WARNF("[v1] peer_supports_v1: neighbor 0x%02x not found", hash);
         return false;
     }
-    DEBUG_INFOF("[v1] peer_supports_v1: hash=0x%02x, protocol_version=%d, supports=%d",
-                hash, neighbor->protocol_version, neighbor->protocol_version >= 1);
+    DEBUG_INFOF("[v1] peer_supports_v1: hash=0x%02x, protocol_version=%d, supports=%d", hash,
+                neighbor->protocol_version, neighbor->protocol_version >= 1);
     return (neighbor->protocol_version >= 1);
 }
 
 /**
  * Send text message using v1 protocol
  */
-int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char *text, size_t len) {
+int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char* text, size_t len) {
     DEBUG_INFOF("[v1] meshgrid_v1_send_text called: dest=0x%04x, len=%d", dest_hash_v1, len);
 
     if (!v1_initialized) {
         DEBUG_INFO("[v1] Auto-initializing v1 bridge");
-        meshgrid_v1_bridge_init();  /* Auto-initialize on first use */
+        meshgrid_v1_bridge_init(); /* Auto-initialize on first use */
     }
 
     /* Find neighbor by scanning for matching v1 hash */
-    struct meshgrid_neighbor *neighbor = nullptr;
+    struct meshgrid_neighbor* neighbor = nullptr;
     for (int i = 0; i < neighbor_count; i++) {
         uint16_t n_hash_v1 = meshgrid_v1_hash_pubkey(neighbors[i].pubkey);
         if (n_hash_v1 == dest_hash_v1) {
@@ -100,7 +100,8 @@ int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char *text, size_t len) {
 
     /* Get next sequence number */
     uint32_t sequence = neighbor->next_seq_tx++;
-    if (neighbor->next_seq_tx == 0) neighbor->next_seq_tx = 1;  /* Skip 0 */
+    if (neighbor->next_seq_tx == 0)
+        neighbor->next_seq_tx = 1; /* Skip 0 */
 
     /* Generate nonce */
     uint8_t nonce[12];
@@ -135,8 +136,8 @@ int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char *text, size_t len) {
     /* Encrypt with AES-GCM */
     uint8_t ciphertext[200];
     uint8_t tag[16];
-    if (meshgrid_v1_aes_gcm_encrypt(neighbor->shared_secret, nonce, nullptr, 0,
-                                     plaintext, pt_pos, ciphertext, tag) != 0) {
+    if (meshgrid_v1_aes_gcm_encrypt(neighbor->shared_secret, nonce, nullptr, 0, plaintext, pt_pos, ciphertext, tag) !=
+        0) {
         DEBUG_WARN("[v1] Encryption failed");
         return -1;
     }
@@ -175,7 +176,7 @@ int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char *text, size_t len) {
 /**
  * Send channel message using v1 protocol
  */
-int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len) {
+int meshgrid_v1_send_channel(uint8_t channel_hash, const char* text, size_t len) {
     DEBUG_INFOF("[v1] meshgrid_v1_send_channel: channel=0x%02x, len=%d", channel_hash, len);
 
     if (!v1_initialized) {
@@ -186,7 +187,7 @@ int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len)
     extern struct channel_entry custom_channels[];
     extern int custom_channel_count;
 
-    struct channel_entry *channel = nullptr;
+    struct channel_entry* channel = nullptr;
     for (int i = 0; i < custom_channel_count; i++) {
         if (custom_channels[i].valid && custom_channels[i].hash == channel_hash) {
             channel = &custom_channels[i];
@@ -227,8 +228,7 @@ int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len)
     /* Encrypt with channel secret */
     uint8_t ciphertext[200];
     uint8_t tag[16];
-    if (meshgrid_v1_aes_gcm_encrypt(channel->secret, nonce, nullptr, 0,
-                                     plaintext, pt_pos, ciphertext, tag) != 0) {
+    if (meshgrid_v1_aes_gcm_encrypt(channel->secret, nonce, nullptr, 0, plaintext, pt_pos, ciphertext, tag) != 0) {
         DEBUG_WARN("[v1] Channel encryption failed");
         return -1;
     }
@@ -267,10 +267,9 @@ int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len)
 /**
  * Process received v1 packet
  */
-int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
-                                int16_t rssi, int8_t snr) {
+int meshgrid_v1_process_packet(const uint8_t* packet, size_t len, int16_t rssi, int8_t snr) {
     if (!v1_initialized) {
-        meshgrid_v1_bridge_init();  /* Auto-initialize on first use */
+        meshgrid_v1_bridge_init(); /* Auto-initialize on first use */
     }
 
     if (len < 1) {
@@ -285,7 +284,7 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
 
     /* Check if this is a v1 packet */
     if (version != 1) {
-        return -1;  /* Not v1, let v0 handle it */
+        return -1; /* Not v1, let v0 handle it */
     }
 
     /* Handle v1 text messages and group messages */
@@ -295,13 +294,13 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
     }
 
     /* Parse v1 packet: [header][nonce(12)][ciphertext][tag(16)] */
-    if (len < 1 + 12 + 8 + 16) {  /* header + nonce + min_payload + tag */
+    if (len < 1 + 12 + 8 + 16) { /* header + nonce + min_payload + tag */
         DEBUG_WARN("[v1] Packet too short");
         return -1;
     }
 
     int pos = 1;
-    const uint8_t *nonce = &packet[pos];
+    const uint8_t* nonce = &packet[pos];
     pos += 12;
 
     int ciphertext_len = len - pos - 16;
@@ -309,14 +308,14 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
         return -1;
     }
 
-    const uint8_t *ciphertext = &packet[pos];
+    const uint8_t* ciphertext = &packet[pos];
     pos += ciphertext_len;
 
-    const uint8_t *tag = &packet[pos];
+    const uint8_t* tag = &packet[pos];
 
     uint8_t plaintext[200];
     bool decrypted = false;
-    struct meshgrid_neighbor *sender = nullptr;
+    struct meshgrid_neighbor* sender = nullptr;
     uint8_t channel_hash = 0;
 
     /* Try to decrypt based on packet type */
@@ -330,15 +329,15 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
                 continue;
             }
             if (neighbors[i].protocol_version < 1) {
-                DEBUG_INFOF("[v1] RX: Skip neighbor %d (hash=0x%02x) - protocol_version=%d",
-                           i, neighbors[i].hash, neighbors[i].protocol_version);
+                DEBUG_INFOF("[v1] RX: Skip neighbor %d (hash=0x%02x) - protocol_version=%d", i, neighbors[i].hash,
+                            neighbors[i].protocol_version);
                 continue;
             }
 
             DEBUG_INFOF("[v1] RX: Trying neighbor %d (hash=0x%02x, name=%s)", i, neighbors[i].hash, neighbors[i].name);
             tried++;
-            if (meshgrid_v1_aes_gcm_decrypt(neighbors[i].shared_secret, nonce, nullptr, 0,
-                                             ciphertext, ciphertext_len, tag, plaintext) == 0) {
+            if (meshgrid_v1_aes_gcm_decrypt(neighbors[i].shared_secret, nonce, nullptr, 0, ciphertext, ciphertext_len,
+                                            tag, plaintext) == 0) {
                 decrypted = true;
                 sender = &neighbors[i];
                 DEBUG_INFOF("[v1] RX: Successfully decrypted with neighbor 0x%02x", sender->hash);
@@ -356,13 +355,14 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
 
         DEBUG_INFOF("[v1] RX: Channel message, trying %d channels", custom_channel_count);
         for (int i = 0; i < custom_channel_count && !decrypted; i++) {
-            if (!custom_channels[i].valid) continue;
+            if (!custom_channels[i].valid)
+                continue;
 
-            DEBUG_INFOF("[v1] RX: Trying channel %d (hash=0x%02x, name=%s)",
-                       i, custom_channels[i].hash, custom_channels[i].name);
+            DEBUG_INFOF("[v1] RX: Trying channel %d (hash=0x%02x, name=%s)", i, custom_channels[i].hash,
+                        custom_channels[i].name);
 
-            if (meshgrid_v1_aes_gcm_decrypt(custom_channels[i].secret, nonce, nullptr, 0,
-                                             ciphertext, ciphertext_len, tag, plaintext) == 0) {
+            if (meshgrid_v1_aes_gcm_decrypt(custom_channels[i].secret, nonce, nullptr, 0, ciphertext, ciphertext_len,
+                                            tag, plaintext) == 0) {
                 decrypted = true;
                 channel_hash = custom_channels[i].hash;
                 DEBUG_INFOF("[v1] RX: Successfully decrypted channel message on 0x%02x", channel_hash);
@@ -391,15 +391,11 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
         pos += 2;
         src_hash = ((uint16_t)plaintext[pos] << 8) | plaintext[pos + 1];
         pos += 2;
-        uint32_t sequence = ((uint32_t)plaintext[pos] << 24) |
-                            ((uint32_t)plaintext[pos + 1] << 16) |
-                            ((uint32_t)plaintext[pos + 2] << 8) |
-                            plaintext[pos + 3];
+        uint32_t sequence = ((uint32_t)plaintext[pos] << 24) | ((uint32_t)plaintext[pos + 1] << 16) |
+                            ((uint32_t)plaintext[pos + 2] << 8) | plaintext[pos + 3];
         pos += 4;
-        uint32_t timestamp = ((uint32_t)plaintext[pos] << 24) |
-                             ((uint32_t)plaintext[pos + 1] << 16) |
-                             ((uint32_t)plaintext[pos + 2] << 8) |
-                             plaintext[pos + 3];
+        uint32_t timestamp = ((uint32_t)plaintext[pos] << 24) | ((uint32_t)plaintext[pos + 1] << 16) |
+                             ((uint32_t)plaintext[pos + 2] << 8) | plaintext[pos + 3];
         pos += 4;
 
         /* Verify sequence number (replay protection) */
@@ -411,7 +407,8 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
 
         /* Extract text */
         int text_len = ciphertext_len - pos;
-        if (text_len > 127) text_len = 127;
+        if (text_len > 127)
+            text_len = 127;
         memcpy(text_buf, &plaintext[pos], text_len);
         text_buf[text_len] = '\0';
 
@@ -422,17 +419,18 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
         int idx = direct_msg_index;
         direct_messages[idx].valid = true;
         direct_messages[idx].decrypted = true;
-        direct_messages[idx].timestamp = timestamp;  /* Use sender's timestamp */
+        direct_messages[idx].timestamp = timestamp; /* Use sender's timestamp */
         direct_messages[idx].sender_hash = sender->hash;
-        direct_messages[idx].channel_hash = 0;  /* 0 = direct message */
-        direct_messages[idx].protocol_version = 1;  /* v1 protocol */
+        direct_messages[idx].channel_hash = 0;     /* 0 = direct message */
+        direct_messages[idx].protocol_version = 1; /* v1 protocol */
         strncpy(direct_messages[idx].sender_name, sender_name, 16);
         direct_messages[idx].sender_name[16] = '\0';
         strncpy(direct_messages[idx].text, text_buf, 127);
         direct_messages[idx].text[127] = '\0';
 
         direct_msg_index = (direct_msg_index + 1) % DIRECT_MESSAGE_BUFFER_SIZE;
-        if (direct_msg_count < DIRECT_MESSAGE_BUFFER_SIZE) direct_msg_count++;
+        if (direct_msg_count < DIRECT_MESSAGE_BUFFER_SIZE)
+            direct_msg_count++;
 
     } else if (payload_type == PAYLOAD_GRP_TXT) {
         /* Channel message: [channel_hash(1)][src_hash(2)][timestamp(4)][text] */
@@ -443,10 +441,8 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
         uint8_t msg_channel_hash = plaintext[pos++];
         src_hash = ((uint16_t)plaintext[pos] << 8) | plaintext[pos + 1];
         pos += 2;
-        uint32_t timestamp = ((uint32_t)plaintext[pos] << 24) |
-                             ((uint32_t)plaintext[pos + 1] << 16) |
-                             ((uint32_t)plaintext[pos + 2] << 8) |
-                             plaintext[pos + 3];
+        uint32_t timestamp = ((uint32_t)plaintext[pos] << 24) | ((uint32_t)plaintext[pos + 1] << 16) |
+                             ((uint32_t)plaintext[pos + 2] << 8) | plaintext[pos + 3];
         pos += 4;
 
         /* Find sender by v1 hash */
@@ -462,7 +458,8 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
 
         /* Extract text */
         int text_len = ciphertext_len - pos;
-        if (text_len > 127) text_len = 127;
+        if (text_len > 127)
+            text_len = 127;
         memcpy(text_buf, &plaintext[pos], text_len);
         text_buf[text_len] = '\0';
 
@@ -486,17 +483,18 @@ int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
             int idx = channel_msg_index[ch_idx];
             channel_messages[ch_idx][idx].valid = true;
             channel_messages[ch_idx][idx].decrypted = true;
-            channel_messages[ch_idx][idx].timestamp = timestamp;  /* Use sender's timestamp */
+            channel_messages[ch_idx][idx].timestamp = timestamp; /* Use sender's timestamp */
             channel_messages[ch_idx][idx].sender_hash = sender ? sender->hash : (src_hash & 0xFF);
             channel_messages[ch_idx][idx].channel_hash = channel_hash;
-            channel_messages[ch_idx][idx].protocol_version = 1;  /* v1 protocol */
+            channel_messages[ch_idx][idx].protocol_version = 1; /* v1 protocol */
             strncpy(channel_messages[ch_idx][idx].sender_name, sender_name, 16);
             channel_messages[ch_idx][idx].sender_name[16] = '\0';
             strncpy(channel_messages[ch_idx][idx].text, text_buf, 127);
             channel_messages[ch_idx][idx].text[127] = '\0';
 
             channel_msg_index[ch_idx] = (channel_msg_index[ch_idx] + 1) % CHANNEL_MESSAGE_BUFFER_SIZE;
-            if (channel_msg_count[ch_idx] < CHANNEL_MESSAGE_BUFFER_SIZE) channel_msg_count[ch_idx]++;
+            if (channel_msg_count[ch_idx] < CHANNEL_MESSAGE_BUFFER_SIZE)
+                channel_msg_count[ch_idx]++;
         }
     }
 

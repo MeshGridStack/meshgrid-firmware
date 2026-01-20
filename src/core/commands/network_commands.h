@@ -16,9 +16,9 @@ void cmd_neighbors();
 void cmd_advert();
 void cmd_advert_local();
 void cmd_advert_flood();
-void cmd_send(const String &args);
-void cmd_send_group(const String &message);
-void cmd_trace(const String &target);
+void cmd_send(const String& args);
+void cmd_send_group(const String& message);
+void cmd_trace(const String& target);
 
 #ifdef __cplusplus
 }

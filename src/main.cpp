@@ -42,10 +42,10 @@
 #include "hardware/board.h"
 #include "hardware/boards/boards.h"
 #ifdef ENABLE_BLE
-#include "hardware/bluetooth/ble_serial.h"
-#include "hardware/bluetooth/SerialBridge.h"
+#    include "hardware/bluetooth/ble_serial.h"
+#    include "hardware/bluetooth/SerialBridge.h"
 #else
-#include "hardware/bluetooth/serial_bridge.h"
+#    include "hardware/bluetooth/serial_bridge.h"
 #endif
 extern "C" {
 #include "hardware/crypto/crypto.h"
@@ -86,8 +86,8 @@ extern "C" {
  * MeshCore Public Channel (for group messaging support)
  * PSK defined in config/config.h
  */
-uint8_t public_channel_secret[32];  /* Decoded PSK - defined here, used in config.cpp */
-uint8_t public_channel_hash = 0;     /* Hash of the public channel */
+uint8_t public_channel_secret[32]; /* Decoded PSK - defined here, used in config.cpp */
+uint8_t public_channel_hash = 0;   /* Hash of the public channel */
 
 /*
  * Custom channels (stored in NVS)
@@ -100,26 +100,28 @@ int custom_channel_count = 0;
  * Configuration - set via serial commands or stored in flash
  */
 enum meshgrid_device_mode device_mode = MODE_CLIENT;
-uint32_t advert_interval_ms = (12 * 60 * 60 * 1000);  /* 12 hours */
+uint32_t advert_interval_ms = (12 * 60 * 60 * 1000); /* 12 hours */
 
 /*
  * Board and hardware
  */
-const struct board_config *board;
+const struct board_config* board;
 
 /* Radio instance - holds the actual radio object (exported for radio_api.cpp) */
 struct radio_instance radio_inst = {RADIO_NONE, {nullptr}};
 
 /* Radio accessor */
-static inline PhysicalLayer* radio() { return radio_inst.as_phy(); }
+static inline PhysicalLayer* radio() {
+    return radio_inst.as_phy();
+}
 
-static SPIClass *radio_spi = nullptr;
+static SPIClass* radio_spi = nullptr;
 
 /* Create display as global object BEFORE Wire.begin() - like MeshCore does
  * Use -1 for reset pin to avoid crashes, handle reset manually in display_init()
  * Non-static so it can be accessed by ui/screens.cpp */
 Adafruit_SSD1306 display_128x64(128, 64, &Wire, -1);
-Adafruit_SSD1306 *display = nullptr;  /* Will point to display_128x64 after board detection */
+Adafruit_SSD1306* display = nullptr; /* Will point to display_128x64 after board detection */
 
 /*
  * Mesh state
@@ -207,7 +209,8 @@ static uint32_t last_telemetry_read = 0;
 /* ========================================================================= */
 
 void led_blink(void) {
-    if (board->power_pins.led < 0) return;
+    if (board->power_pins.led < 0)
+        return;
     digitalWrite(board->power_pins.led, HIGH);
     delay(30);
     digitalWrite(board->power_pins.led, LOW);
@@ -225,8 +228,7 @@ static void on_button_short_press(void) {
 
 static void on_button_long_press(void) {
     /* Long press: scroll up or send advertisement */
-    if (display_state.current_screen == SCREEN_NEIGHBORS ||
-        display_state.current_screen == SCREEN_MESSAGES) {
+    if (display_state.current_screen == SCREEN_NEIGHBORS || display_state.current_screen == SCREEN_MESSAGES) {
         display_scroll_up(&display_state);
     } else {
         /* Send local advertisement on button press */
@@ -269,7 +271,7 @@ void radio_isr(void) {
 #endif
 
 static int radio_init(void) {
-    const struct radio_pins *pins = &board->radio_pins;
+    const struct radio_pins* pins = &board->radio_pins;
 
 #if defined(ARCH_ESP32S3) || defined(ARCH_ESP32)
     radio_spi = new SPIClass(HSPI);
@@ -301,10 +303,9 @@ static int radio_init(void) {
     /* Set up interrupt callback for RX only (RadioLib handles DIO GPIO config) */
     /* TX uses blocking/polling mode, so no TX interrupt needed */
     radio()->setPacketReceivedAction(radio_isr);
-    DEBUG_INFOF("ISR attached to DIO%d (pin %d)",
-                board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ? 0 : 1,
-                board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ?
-                    board->radio_pins.dio0 : board->radio_pins.dio1);
+    DEBUG_INFOF("ISR attached to DIO%d (pin %d)", board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ? 0 : 1,
+                board->radio == RADIO_SX1276 || board->radio == RADIO_SX1278 ? board->radio_pins.dio0
+                                                                             : board->radio_pins.dio1);
 
     return 0;
 }
@@ -317,8 +318,8 @@ bool radio_ok = true;
 
 void setup() {
     Serial.begin(115200);
-    delay(100);  /* Brief delay for serial init */
-    serial_commands_init();  /* Clear serial buffers */
+    delay(100);             /* Brief delay for serial init */
+    serial_commands_init(); /* Clear serial buffers */
 
     board = &CURRENT_BOARD_CONFIG;
 
@@ -330,23 +331,23 @@ void setup() {
     power_init();
 
     /* Initialize I2C AFTER power - like MeshCore's board.begin() does */
-    const struct display_pins *dpins = &board->display_pins;
+    const struct display_pins* dpins = &board->display_pins;
     if (dpins->sda >= 0 && dpins->scl >= 0) {
         Wire.begin(dpins->sda, dpins->scl);
-        delay(100);  // Give I2C and OLED power time to stabilize
+        delay(100); // Give I2C and OLED power time to stabilize
     }
 
     boot_time = millis();
     identity_init();
-    init_public_channel();  // Initialize MeshCore public channel
-    tx_queue_init();        // Initialize packet transmission queue
-    config_load();          // Load saved radio config from flash
-    security_init();        // Initialize PIN authentication
-    neighbors_load_from_nvs();  // Restore neighbors with cached secrets
-    channels_load_from_nvs();   // Restore custom channels
+    init_public_channel();     // Initialize MeshCore public channel
+    tx_queue_init();           // Initialize packet transmission queue
+    config_load();             // Load saved radio config from flash
+    security_init();           // Initialize PIN authentication
+    neighbors_load_from_nvs(); // Restore neighbors with cached secrets
+    channels_load_from_nvs();  // Restore custom channels
 
     DEBUG_INFO("=== Initializing MeshCore v0 ===");
-    meshcore_bridge_initialize();  // Initialize MeshCore v0 integration
+    meshcore_bridge_initialize(); // Initialize MeshCore v0 integration
     DEBUG_INFO("=== MeshCore v0 ready ===");
 
     /* meshgrid v1 auto-initialized on first use */
@@ -357,7 +358,8 @@ void setup() {
     display_state_init(&display_state);
 
     /* Board-specific late initialization (e.g., display contrast) */
-    if (board->late_init) board->late_init();
+    if (board->late_init)
+        board->late_init();
 
     if (display) {
         display->clearDisplay();
@@ -377,9 +379,9 @@ void setup() {
     radio_ok = (radio_init() == 0);
     if (radio_ok) {
         int rx_state = radio()->startReceive();
-        DEBUG_INFOF("startReceive() returned: %d (ISR attached, DIO0=%d, DIO1=%d)",
-                    rx_state, board->radio_pins.dio0, board->radio_pins.dio1);
-        send_advertisement(ROUTE_DIRECT);  /* Initial local advertisement */
+        DEBUG_INFOF("startReceive() returned: %d (ISR attached, DIO0=%d, DIO1=%d)", rx_state, board->radio_pins.dio0,
+                    board->radio_pins.dio1);
+        send_advertisement(ROUTE_DIRECT); /* Initial local advertisement */
     }
 
 #ifdef ENABLE_BLE

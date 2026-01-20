@@ -25,7 +25,7 @@ int serial_bridge_read(void) {
     return -1;
 }
 
-void serial_bridge_write(const uint8_t *data, size_t len) {
+void serial_bridge_write(const uint8_t* data, size_t len) {
     /* Always write to USB Serial */
     Serial.write(data, len);
 
@@ -35,11 +35,11 @@ void serial_bridge_write(const uint8_t *data, size_t len) {
     }
 }
 
-void serial_bridge_print(const char *str) {
+void serial_bridge_print(const char* str) {
     serial_bridge_write((const uint8_t*)str, strlen(str));
 }
 
-void serial_bridge_println(const char *str) {
+void serial_bridge_println(const char* str) {
     serial_bridge_print(str);
     serial_bridge_write((const uint8_t*)"\n", 1);
 }

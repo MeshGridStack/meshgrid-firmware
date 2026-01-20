@@ -21,9 +21,9 @@ extern "C" {
  * Power rail identifiers
  */
 enum power_rail {
-    POWER_RAIL_DISPLAY = 0,  /* OLED/LCD/E-Ink display */
-    POWER_RAIL_RADIO,         /* LoRa radio module */
-    POWER_RAIL_GPS,           /* GPS module */
+    POWER_RAIL_DISPLAY = 0, /* OLED/LCD/E-Ink display */
+    POWER_RAIL_RADIO,       /* LoRa radio module */
+    POWER_RAIL_GPS,         /* GPS module */
     POWER_RAIL_COUNT
 };
 
@@ -34,7 +34,7 @@ enum power_rail {
  * Boards provide their own implementation by setting board->power_ops.
  */
 struct power_ops {
-    const char *name;
+    const char* name;
 
     /* Initialize power subsystem */
     int (*init)(void);

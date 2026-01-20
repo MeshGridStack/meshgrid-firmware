@@ -40,7 +40,7 @@ void meshgrid_v1_bridge_init(void);
  *
  * @return 0 on success, -1 on error
  */
-int meshgrid_v1_send_text(uint16_t dest_hash, const char *text, size_t len);
+int meshgrid_v1_send_text(uint16_t dest_hash, const char* text, size_t len);
 
 /**
  * Send channel message using v1 protocol
@@ -51,7 +51,7 @@ int meshgrid_v1_send_text(uint16_t dest_hash, const char *text, size_t len);
  *
  * @return 0 on success, -1 on error
  */
-int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len);
+int meshgrid_v1_send_channel(uint8_t channel_hash, const char* text, size_t len);
 
 /**
  * Process received v1 packet
@@ -65,8 +65,7 @@ int meshgrid_v1_send_channel(uint8_t channel_hash, const char *text, size_t len)
  *
  * @return 0 if handled, -1 if not a v1 packet
  */
-int meshgrid_v1_process_packet(const uint8_t *packet, size_t len,
-                                int16_t rssi, int8_t snr);
+int meshgrid_v1_process_packet(const uint8_t* packet, size_t len, int16_t rssi, int8_t snr);
 
 /**
  * Check if neighbor supports v1 protocol

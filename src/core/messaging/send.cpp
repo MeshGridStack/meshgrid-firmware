@@ -13,10 +13,10 @@
 
 // Use C bridge to avoid namespace conflict
 extern "C" {
-    #include "core/meshcore_bridge.h"
-    #include "core/mesh_accessor.h"
-    int16_t radio_transmit(uint8_t* data, size_t len);
-    int16_t radio_start_receive(void);
+#include "core/meshcore_bridge.h"
+#include "core/mesh_accessor.h"
+int16_t radio_transmit(uint8_t* data, size_t len);
+int16_t radio_start_receive(void);
 }
 
 extern "C" {
@@ -47,7 +47,7 @@ void send_advertisement(uint8_t route_type) {
         meshcore_bridge_loop();
         delay(5);
         if (mesh.packets_tx > tx_before) {
-            break;  // Transmission completed
+            break; // Transmission completed
         }
     }
 
@@ -67,8 +67,8 @@ void send_advert_direct(void) {
     memset(packet, 0, sizeof(packet));
 
     // Simple packet format for testing
-    packet[0] = 0xAD;  // Advertisement marker
-    packet[1] = mesh.privkey[31];  // Node hash (last byte of privkey)
+    packet[0] = 0xAD;             // Advertisement marker
+    packet[1] = mesh.privkey[31]; // Node hash (last byte of privkey)
     const char* name = mesh_get_name();
     strncpy((char*)&packet[2], name ? name : "test", 16);
 
@@ -89,7 +89,7 @@ void send_advert_direct(void) {
  * Send encrypted group message to public channel
  * Uses MeshCore v0 (MeshCore compatible)
  */
-void send_group_message(const char *text) {
+void send_group_message(const char* text) {
     /* Use v0 protocol for maximum compatibility */
     meshcore_bridge_send_channel(public_channel_hash, public_channel_secret, text, "Public");
 }

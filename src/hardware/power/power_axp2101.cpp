@@ -11,13 +11,13 @@
 
 #ifdef BOARD_LILYGO_TBEAM
 
-#define XPOWERS_CHIP_AXP2101
-#include <XPowersLib.h>
+#    define XPOWERS_CHIP_AXP2101
+#    include <XPowersLib.h>
 
 /* I2C pins for T-Beam */
-#define I2C_SDA 21
-#define I2C_SCL 22
-#define PMU_IRQ 35
+#    define I2C_SDA 21
+#    define I2C_SCL 22
+#    define PMU_IRQ 35
 
 static XPowersPMU power;
 static bool axp2101_initialized = false;
@@ -32,7 +32,7 @@ static int axp2101_init(void) {
 
     if (!result) {
         Serial.println("[AXP2101] PMU not found, trying AXP192...");
-        return -1;  /* AXP2101 not found - might be v1.0/1.1 with AXP192 */
+        return -1; /* AXP2101 not found - might be v1.0/1.1 with AXP192 */
     }
 
     Serial.printf("[AXP2101] Found chip ID: 0x%x\n", power.getChipID());
@@ -43,24 +43,24 @@ static int axp2101_init(void) {
     power.setSysPowerDownVoltage(2600);
 
     /* Enable DCDC outputs for LoRa and other peripherals */
-    power.setDC3Voltage(3300);  /* 3.3V for LoRa */
+    power.setDC3Voltage(3300); /* 3.3V for LoRa */
     power.enableDC3();
 
     /* Enable ALDO outputs */
-    power.setALDO1Voltage(3300);  /* 3.3V */
+    power.setALDO1Voltage(3300); /* 3.3V */
     power.enableALDO1();
 
-    power.setALDO2Voltage(3300);  /* 3.3V for GPS */
+    power.setALDO2Voltage(3300); /* 3.3V for GPS */
     power.enableALDO2();
 
-    power.setALDO3Voltage(3300);  /* 3.3V */
+    power.setALDO3Voltage(3300); /* 3.3V */
     power.enableALDO3();
 
-    power.setALDO4Voltage(3300);  /* 3.3V */
+    power.setALDO4Voltage(3300); /* 3.3V */
     power.enableALDO4();
 
     /* Enable BLDO outputs */
-    power.setBLDO1Voltage(3300);  /* 3.3V */
+    power.setBLDO1Voltage(3300); /* 3.3V */
     power.enableBLDO1();
 
     /* Configure charging */
@@ -71,7 +71,7 @@ static int axp2101_init(void) {
     power.setChargingLedMode(XPOWERS_CHG_LED_ON);
 
     axp2101_initialized = true;
-    delay(200);  /* Give power rails time to stabilize */
+    delay(200); /* Give power rails time to stabilize */
 
     Serial.println("[AXP2101] Initialization complete");
     return 0;
@@ -114,7 +114,7 @@ static int axp2101_enable_rail(enum power_rail rail, bool enable) {
             return -1;
     }
 
-    delay(50);  /* Allow rail to stabilize */
+    delay(50); /* Allow rail to stabilize */
     return 0;
 }
 

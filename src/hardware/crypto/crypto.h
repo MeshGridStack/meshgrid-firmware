@@ -16,20 +16,20 @@
 #include <stdbool.h>
 
 /* Key sizes (MeshCore compatible) */
-#define CRYPTO_PUBKEY_SIZE      32
-#define CRYPTO_PRIVKEY_SIZE     64
-#define CRYPTO_SEED_SIZE        32
-#define CRYPTO_SIGNATURE_SIZE   64
+#define CRYPTO_PUBKEY_SIZE 32
+#define CRYPTO_PRIVKEY_SIZE 64
+#define CRYPTO_SEED_SIZE 32
+#define CRYPTO_SIGNATURE_SIZE 64
 #define CRYPTO_SHARED_SECRET_SIZE 32
 
 /* Cipher sizes (MeshCore compatible) */
-#define CRYPTO_AES_KEY_SIZE     16
-#define CRYPTO_AES_BLOCK_SIZE   16
-#define CRYPTO_MAC_SIZE         2   /* MeshCore uses truncated MAC */
+#define CRYPTO_AES_KEY_SIZE 16
+#define CRYPTO_AES_BLOCK_SIZE 16
+#define CRYPTO_MAC_SIZE 2 /* MeshCore uses truncated MAC */
 
 /* Hash sizes */
-#define CRYPTO_SHA256_SIZE      32
-#define CRYPTO_PATH_HASH_SIZE   1   /* MeshCore compatible */
+#define CRYPTO_SHA256_SIZE 32
+#define CRYPTO_PATH_HASH_SIZE 1 /* MeshCore compatible */
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +47,7 @@ void crypto_init(void);
  * @param privkey Output: 64-byte private key
  * @return 0 on success, -1 on error
  */
-int crypto_generate_keypair(uint8_t *pubkey, uint8_t *privkey);
+int crypto_generate_keypair(uint8_t* pubkey, uint8_t* privkey);
 
 /**
  * Sign a message with Ed25519
@@ -57,8 +57,8 @@ int crypto_generate_keypair(uint8_t *pubkey, uint8_t *privkey);
  * @param pubkey 32-byte public key
  * @param privkey 64-byte private key
  */
-void crypto_sign(uint8_t *signature, const uint8_t *message, size_t message_len,
-                 const uint8_t *pubkey, const uint8_t *privkey);
+void crypto_sign(uint8_t* signature, const uint8_t* message, size_t message_len, const uint8_t* pubkey,
+                 const uint8_t* privkey);
 
 /**
  * Verify an Ed25519 signature
@@ -68,8 +68,7 @@ void crypto_sign(uint8_t *signature, const uint8_t *message, size_t message_len,
  * @param pubkey 32-byte public key of signer
  * @return true if signature is valid
  */
-bool crypto_verify(const uint8_t *signature, const uint8_t *message,
-                   size_t message_len, const uint8_t *pubkey);
+bool crypto_verify(const uint8_t* signature, const uint8_t* message, size_t message_len, const uint8_t* pubkey);
 
 /**
  * Perform X25519 key exchange to derive shared secret
@@ -77,8 +76,7 @@ bool crypto_verify(const uint8_t *signature, const uint8_t *message,
  * @param our_privkey Our 64-byte private key
  * @param their_pubkey Their 32-byte public key
  */
-void crypto_key_exchange(uint8_t *shared_secret, const uint8_t *our_privkey,
-                         const uint8_t *their_pubkey);
+void crypto_key_exchange(uint8_t* shared_secret, const uint8_t* our_privkey, const uint8_t* their_pubkey);
 
 /**
  * Encrypt data with AES-128
@@ -89,8 +87,7 @@ void crypto_key_exchange(uint8_t *shared_secret, const uint8_t *our_privkey,
  * @param shared_secret 32-byte shared secret from key exchange
  * @return Length of encrypted data (multiple of 16)
  */
-int crypto_encrypt(uint8_t *dest, const uint8_t *src, int src_len,
-                   const uint8_t *shared_secret);
+int crypto_encrypt(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret);
 
 /**
  * Decrypt data with AES-128
@@ -100,8 +97,7 @@ int crypto_encrypt(uint8_t *dest, const uint8_t *src, int src_len,
  * @param shared_secret 32-byte shared secret from key exchange
  * @return Length of decrypted data
  */
-int crypto_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
-                   const uint8_t *shared_secret);
+int crypto_decrypt(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret);
 
 /**
  * Encrypt then MAC (MeshCore compatible)
@@ -112,8 +108,7 @@ int crypto_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
  * @param shared_secret 32-byte shared secret
  * @return Total length (MAC_SIZE + ciphertext length)
  */
-int crypto_encrypt_then_mac(uint8_t *dest, const uint8_t *src, int src_len,
-                            const uint8_t *shared_secret);
+int crypto_encrypt_then_mac(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret);
 
 /**
  * Verify MAC then decrypt (MeshCore compatible)
@@ -123,8 +118,7 @@ int crypto_encrypt_then_mac(uint8_t *dest, const uint8_t *src, int src_len,
  * @param shared_secret 32-byte shared secret
  * @return Plaintext length, or 0 if MAC invalid
  */
-int crypto_mac_then_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
-                            const uint8_t *shared_secret);
+int crypto_mac_then_decrypt(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret);
 
 /**
  * Compute SHA256 hash
@@ -133,14 +127,14 @@ int crypto_mac_then_decrypt(uint8_t *dest, const uint8_t *src, int src_len,
  * @param data Input data
  * @param data_len Length of input
  */
-void crypto_sha256(uint8_t *hash, size_t hash_len, const uint8_t *data, size_t data_len);
+void crypto_sha256(uint8_t* hash, size_t hash_len, const uint8_t* data, size_t data_len);
 
 /**
  * Get random bytes
  * @param dest Output buffer
  * @param len Number of random bytes
  */
-void crypto_random(uint8_t *dest, size_t len);
+void crypto_random(uint8_t* dest, size_t len);
 
 /**
  * Compute MeshCore-compatible 1-byte hash from public key
@@ -148,12 +142,12 @@ void crypto_random(uint8_t *dest, size_t len);
  * @param pubkey 32-byte public key
  * @return 1-byte hash
  */
-uint8_t crypto_hash_pubkey(const uint8_t *pubkey);
+uint8_t crypto_hash_pubkey(const uint8_t* pubkey);
 
 /* ========== Protocol v1 (Enhanced Security) ========== */
 
-#define CRYPTO_V1_MAC_SIZE      16   /* Full 16-byte HMAC */
-#define CRYPTO_V1_NONCE_SIZE    12   /* 96-bit nonce for CTR mode */
+#define CRYPTO_V1_MAC_SIZE 16   /* Full 16-byte HMAC */
+#define CRYPTO_V1_NONCE_SIZE 12 /* 96-bit nonce for CTR mode */
 
 /**
  * Encrypt with AES-256-CTR + 16-byte HMAC (Protocol v1)
@@ -164,8 +158,8 @@ uint8_t crypto_hash_pubkey(const uint8_t *pubkey);
  * @param nonce 12-byte nonce (must be unique per message)
  * @return Total length (28 + ciphertext length), or -1 on error
  */
-int crypto_encrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
-                      const uint8_t *shared_secret, const uint8_t *nonce);
+int crypto_encrypt_v1(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret,
+                      const uint8_t* nonce);
 
 /**
  * Verify HMAC and decrypt with AES-256-CTR (Protocol v1)
@@ -175,15 +169,14 @@ int crypto_encrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
  * @param shared_secret 32-byte shared secret (full key)
  * @return Plaintext length, or 0 if MAC invalid
  */
-int crypto_decrypt_v1(uint8_t *dest, const uint8_t *src, int src_len,
-                      const uint8_t *shared_secret);
+int crypto_decrypt_v1(uint8_t* dest, const uint8_t* src, int src_len, const uint8_t* shared_secret);
 
 /**
  * Generate a unique nonce for v1 encryption
  * Format: timestamp(4) + random(8)
  * @param nonce Output: 12-byte nonce
  */
-void crypto_generate_nonce(uint8_t *nonce);
+void crypto_generate_nonce(uint8_t* nonce);
 
 #ifdef __cplusplus
 }

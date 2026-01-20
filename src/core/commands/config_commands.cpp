@@ -41,7 +41,7 @@ void cmd_config_reset() {
     ESP.restart();
 }
 
-void cmd_set_name(const String &name) {
+void cmd_set_name(const String& name) {
     if (name.length() > 0 && name.length() <= 16) {
         strncpy(mesh.name, name.c_str(), 16);
         mesh.name[16] = '\0';
@@ -129,7 +129,7 @@ void cmd_set_preamble(int preamble) {
     }
 }
 
-void cmd_set_preset(const String &preset) {
+void cmd_set_preset(const String& preset) {
     if (preset == "EU_NARROW" || preset == "EU") {
         radio_set_frequency(869.618);
         radio_set_bandwidth(62.5);

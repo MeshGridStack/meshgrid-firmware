@@ -17,7 +17,7 @@
 /* Layout constants - can be adjusted for different densities */
 #define UI_HEADER_HEIGHT 11
 #define UI_FOOTER_HEIGHT 8
-#define UI_CONTENT_TOP (UI_HEADER_HEIGHT + 1)  /* Start below header */
+#define UI_CONTENT_TOP (UI_HEADER_HEIGHT + 1) /* Start below header */
 #define UI_CONTENT_BOTTOM (UI_SCREEN_HEIGHT - UI_FOOTER_HEIGHT - 1)
 #define UI_CONTENT_HEIGHT (UI_CONTENT_BOTTOM - UI_CONTENT_TOP)
 
@@ -35,27 +35,26 @@
  * UI List Item - Generic structure for list entries
  */
 struct ui_list_item {
-    char primary_text[UI_MAX_MEDIUM_TEXT];    /* Main text (left aligned) */
-    char secondary_text[UI_MAX_SHORT_TEXT];   /* Secondary text (right aligned or below) */
-    char badge[4];                             /* Small badge/icon (e.g., "C", "MC") */
-    int value;                                 /* Numeric value (e.g., RSSI) */
-    bool show_value;                           /* Whether to display value */
+    char primary_text[UI_MAX_MEDIUM_TEXT];  /* Main text (left aligned) */
+    char secondary_text[UI_MAX_SHORT_TEXT]; /* Secondary text (right aligned or below) */
+    char badge[4];                          /* Small badge/icon (e.g., "C", "MC") */
+    int value;                              /* Numeric value (e.g., RSSI) */
+    bool show_value;                        /* Whether to display value */
 };
 
 /**
  * UI Label-Value Pair
  */
 struct ui_label_value {
-    const char *label;
+    const char* label;
     char value[UI_MAX_MEDIUM_TEXT];
-    int y_pos;  /* Auto-calculated if 0 */
+    int y_pos; /* Auto-calculated if 0 */
 };
 
 /**
  * Draw a standard header bar with title and optional battery indicator
  */
-static inline void ui_draw_header(Adafruit_SSD1306 *display, const char *title,
-                                  int battery_pct = -1) {
+static inline void ui_draw_header(Adafruit_SSD1306* display, const char* title, int battery_pct = -1) {
     display->setTextSize(1);
 
     /* Header background */
@@ -74,14 +73,13 @@ static inline void ui_draw_header(Adafruit_SSD1306 *display, const char *title,
         display->print(bat_str);
     }
 
-    display->setTextColor(SSD1306_WHITE);  /* Reset to normal */
+    display->setTextColor(SSD1306_WHITE); /* Reset to normal */
 }
 
 /**
  * Draw a footer with page indicator and optional hint
  */
-static inline void ui_draw_footer(Adafruit_SSD1306 *display, const char *hint,
-                                  int current_page, int total_pages) {
+static inline void ui_draw_footer(Adafruit_SSD1306* display, const char* hint, int current_page, int total_pages) {
     display->setTextSize(1);
     int y = UI_SCREEN_HEIGHT - UI_FOOTER_HEIGHT;
 
@@ -94,7 +92,7 @@ static inline void ui_draw_footer(Adafruit_SSD1306 *display, const char *hint,
     /* Page indicator on right */
     char page_str[8];
     snprintf(page_str, sizeof(page_str), "%d/%d", current_page, total_pages);
-    int text_width = strlen(page_str) * 6;  /* 6px per char at size 1 */
+    int text_width = strlen(page_str) * 6; /* 6px per char at size 1 */
     display->setCursor(UI_SCREEN_WIDTH - text_width, y);
     display->print(page_str);
 }
@@ -103,8 +101,7 @@ static inline void ui_draw_footer(Adafruit_SSD1306 *display, const char *hint,
  * Draw a label-value pair at specified position
  * Returns the Y position for the next item
  */
-static inline int ui_draw_label_value(Adafruit_SSD1306 *display, int y,
-                                      const char *label, const char *value) {
+static inline int ui_draw_label_value(Adafruit_SSD1306* display, int y, const char* label, const char* value) {
     char line[UI_MAX_LONG_TEXT];
     snprintf(line, sizeof(line), "%s %s", label, value);
     display->setCursor(0, y);
@@ -117,8 +114,7 @@ static inline int ui_draw_label_value(Adafruit_SSD1306 *display, int y,
  * Layout: [Badge] Primary Text        Secondary
  * Returns the Y position for the next item
  */
-static inline int ui_draw_list_item(Adafruit_SSD1306 *display, int y,
-                                    const struct ui_list_item *item) {
+static inline int ui_draw_list_item(Adafruit_SSD1306* display, int y, const struct ui_list_item* item) {
     char line[UI_MAX_LONG_TEXT];
 
     /* Left side: Badge + Primary text */
@@ -148,9 +144,7 @@ static inline int ui_draw_list_item(Adafruit_SSD1306 *display, int y,
 /**
  * Draw multiple label-value pairs with automatic spacing
  */
-static inline void ui_draw_info_screen(Adafruit_SSD1306 *display,
-                                       struct ui_label_value *items,
-                                       int item_count) {
+static inline void ui_draw_info_screen(Adafruit_SSD1306* display, struct ui_label_value* items, int item_count) {
     int y = UI_CONTENT_TOP + 2;
     for (int i = 0; i < item_count; i++) {
         y = ui_draw_label_value(display, y, items[i].label, items[i].value);
@@ -161,14 +155,10 @@ static inline void ui_draw_info_screen(Adafruit_SSD1306 *display,
  * Draw a scrollable list with items
  * Returns true if there are more items to scroll
  */
-static inline bool ui_draw_list(Adafruit_SSD1306 *display,
-                                struct ui_list_item *items,
-                                int total_items,
-                                int scroll_offset,
-                                int max_visible) {
+static inline bool ui_draw_list(Adafruit_SSD1306* display, struct ui_list_item* items, int total_items,
+                                int scroll_offset, int max_visible) {
     int y = UI_CONTENT_TOP;
-    int end = (total_items < scroll_offset + max_visible) ?
-               total_items : scroll_offset + max_visible;
+    int end = (total_items < scroll_offset + max_visible) ? total_items : scroll_offset + max_visible;
 
     for (int i = scroll_offset; i < end; i++) {
         y = ui_draw_list_item(display, y, &items[i]);
@@ -177,8 +167,7 @@ static inline bool ui_draw_list(Adafruit_SSD1306 *display,
     /* Show scroll indicator if there are more items */
     if (total_items > max_visible) {
         char scroll_info[16];
-        snprintf(scroll_info, sizeof(scroll_info), "%d-%d/%d",
-                 scroll_offset + 1, end, total_items);
+        snprintf(scroll_info, sizeof(scroll_info), "%d-%d/%d", scroll_offset + 1, end, total_items);
         int text_width = strlen(scroll_info) * 6;
         display->setCursor(UI_SCREEN_WIDTH - text_width - 2, UI_SCREEN_HEIGHT - 8);
         display->print(scroll_info);
@@ -190,7 +179,7 @@ static inline bool ui_draw_list(Adafruit_SSD1306 *display,
 /**
  * Truncate text to fit within max_chars, adding "..." if needed
  */
-static inline void ui_truncate_text(char *dest, const char *src, int max_chars) {
+static inline void ui_truncate_text(char* dest, const char* src, int max_chars) {
     if (strlen(src) <= max_chars) {
         strcpy(dest, src);
     } else {
@@ -205,9 +194,8 @@ static inline void ui_truncate_text(char *dest, const char *src, int max_chars) 
 /**
  * Draw centered text at specified Y position
  */
-static inline void ui_draw_centered_text(Adafruit_SSD1306 *display, int y,
-                                         const char *text) {
-    int text_width = strlen(text) * 6;  /* 6px per char at size 1 */
+static inline void ui_draw_centered_text(Adafruit_SSD1306* display, int y, const char* text) {
+    int text_width = strlen(text) * 6; /* 6px per char at size 1 */
     int x = (UI_SCREEN_WIDTH - text_width) / 2;
     display->setCursor(x, y);
     display->print(text);
@@ -216,9 +204,8 @@ static inline void ui_draw_centered_text(Adafruit_SSD1306 *display, int y,
 /**
  * Draw a progress bar
  */
-static inline void ui_draw_progress_bar(Adafruit_SSD1306 *display, int y,
-                                        int value, int max_value,
-                                        int width = 100, int height = 6) {
+static inline void ui_draw_progress_bar(Adafruit_SSD1306* display, int y, int value, int max_value, int width = 100,
+                                        int height = 6) {
     int x = (UI_SCREEN_WIDTH - width) / 2;
 
     /* Border */
@@ -234,7 +221,7 @@ static inline void ui_draw_progress_bar(Adafruit_SSD1306 *display, int y,
 /**
  * Format time duration into human readable string
  */
-static inline void ui_format_duration(char *dest, int max_len, uint32_t seconds) {
+static inline void ui_format_duration(char* dest, int max_len, uint32_t seconds) {
     if (seconds < 60) {
         snprintf(dest, max_len, "%lus", seconds);
     } else if (seconds < 3600) {
@@ -249,7 +236,7 @@ static inline void ui_format_duration(char *dest, int max_len, uint32_t seconds)
 /**
  * Format byte count into human readable string (B, KB, MB)
  */
-static inline void ui_format_bytes(char *dest, int max_len, unsigned long bytes) {
+static inline void ui_format_bytes(char* dest, int max_len, unsigned long bytes) {
     if (bytes < 1024) {
         snprintf(dest, max_len, "%lu B", bytes);
     } else if (bytes < 1024 * 1024) {

@@ -30,8 +30,8 @@
 /* Radio Airtime Management                                                  */
 /* ========================================================================= */
 
-#define AIRTIME_WINDOW_MS 10000    /* 10 second rolling window */
-#define AIRTIME_BUDGET_PCT 33      /* 33% duty cycle limit */
+#define AIRTIME_WINDOW_MS 10000 /* 10 second rolling window */
+#define AIRTIME_BUDGET_PCT 33   /* 33% duty cycle limit */
 
 /* ========================================================================= */
 /* Public Channel Configuration                                              */

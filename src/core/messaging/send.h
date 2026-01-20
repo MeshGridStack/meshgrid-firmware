@@ -12,6 +12,6 @@
 void send_advertisement(uint8_t route_type);
 
 /* Public channel shortcut */
-void send_group_message(const char *text);
+void send_group_message(const char* text);
 
 #endif /* MESSAGING_SEND_H */

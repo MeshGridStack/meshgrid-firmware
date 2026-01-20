@@ -13,7 +13,7 @@
 
 #ifdef __cplusplus
 
-#include <RadioLib.h>
+#    include <RadioLib.h>
 
 /**
  * Radio configuration structure
@@ -28,7 +28,7 @@ struct radio_config {
     bool use_crc;
     float tcxo_voltage;
     bool dio2_as_rf_switch;
-    uint8_t sync_word;      // LoRa sync word (0x12 for MeshCore compat, 0 = use radio default)
+    uint8_t sync_word; // LoRa sync word (0x12 for MeshCore compat, 0 = use radio default)
 };
 
 /**
@@ -37,10 +37,10 @@ struct radio_config {
 struct radio_instance {
     enum radio_type type;
     union {
-        SX1262 *sx1262;
-        SX1276 *sx1276;
-        SX1280 *sx1280;
-        LR1110 *lr1110;
+        SX1262* sx1262;
+        SX1276* sx1276;
+        SX1280* sx1280;
+        LR1110* lr1110;
     };
 
     /* Get as PhysicalLayer for common operations */
@@ -69,11 +69,8 @@ struct radio_instance {
  * Creates Module and radio object internally based on radio type
  * Returns: 0 on success, RadioLib error code on failure
  */
-int radio_hal_init(struct radio_instance *radio,
-                   const struct radio_pins *pins,
-                   SPIClass *spi,
-                   const struct radio_config *config,
-                   enum radio_type type);
+int radio_hal_init(struct radio_instance* radio, const struct radio_pins* pins, SPIClass* spi,
+                   const struct radio_config* config, enum radio_type type);
 
 /**
  * Radio parameter setters - chip-agnostic wrappers

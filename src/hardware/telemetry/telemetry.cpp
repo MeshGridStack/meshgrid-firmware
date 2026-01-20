@@ -9,31 +9,29 @@
 
 /* Platform-specific free heap */
 #if defined(ARCH_ESP32S3) || defined(ARCH_ESP32) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
-#define GET_FREE_HEAP() ESP.getFreeHeap()
+#    define GET_FREE_HEAP() ESP.getFreeHeap()
 #elif defined(ARCH_NRF52840)
 extern "C" uint32_t dbgHeapTotal(void);
-#define GET_FREE_HEAP() dbgHeapTotal()
+#    define GET_FREE_HEAP() dbgHeapTotal()
 #elif defined(ARCH_RP2040)
-extern "C" char *sbrk(int incr);
-#define GET_FREE_HEAP() (256 * 1024 - ((char*)sbrk(0) - (char*)0x20000000))
+extern "C" char* sbrk(int incr);
+#    define GET_FREE_HEAP() (256 * 1024 - ((char*)sbrk(0) - (char*)0x20000000))
 #else
-#define GET_FREE_HEAP() 0
+#    define GET_FREE_HEAP() 0
 #endif
 
 /* External board-specific ops (defined by board driver) */
-extern const struct telemetry_ops *board_telemetry_ops;
+extern const struct telemetry_ops* board_telemetry_ops;
 
 static bool telemetry_initialized = false;
 static uint32_t boot_time_ms = 0;
 
-const struct telemetry_ops *telemetry_get_ops(void)
-{
+const struct telemetry_ops* telemetry_get_ops(void) {
     return board_telemetry_ops;
 }
 
-void telemetry_init(void)
-{
-    const struct telemetry_ops *ops = telemetry_get_ops();
+void telemetry_init(void) {
+    const struct telemetry_ops* ops = telemetry_get_ops();
 
     if (ops && ops->init) {
         ops->init();
@@ -43,9 +41,8 @@ void telemetry_init(void)
     telemetry_initialized = true;
 }
 
-void telemetry_read(struct telemetry_data *data)
-{
-    const struct telemetry_ops *ops = telemetry_get_ops();
+void telemetry_read(struct telemetry_data* data) {
+    const struct telemetry_ops* ops = telemetry_get_ops();
 
     memset(data, 0, sizeof(*data));
 
@@ -56,7 +53,7 @@ void telemetry_read(struct telemetry_data *data)
     /* Enable ADC if board supports it */
     if (ops->adc_enable) {
         ops->adc_enable(true);
-        delay(10);  /* Let ADC settle */
+        delay(10); /* Let ADC settle */
     }
 
     /* Read battery */
@@ -68,7 +65,7 @@ void telemetry_read(struct telemetry_data *data)
     /* Read solar */
     if (ops->read_solar_mv) {
         data->solar_mv = ops->read_solar_mv();
-        data->has_solar = (data->solar_mv > 100);  /* >0.1V = solar present */
+        data->has_solar = (data->solar_mv > 100); /* >0.1V = solar present */
     }
 
     /* Check power state */
@@ -95,15 +92,14 @@ void telemetry_read(struct telemetry_data *data)
     data->free_heap = GET_FREE_HEAP();
 
     /* CPU load estimation (simplified) */
-    data->cpu_load = 0;  /* TODO: implement proper CPU load tracking */
+    data->cpu_load = 0; /* TODO: implement proper CPU load tracking */
 }
 
 /**
  * Li-ion battery discharge curve (3.0V - 4.2V)
  * Based on typical discharge curve for 18650 cells
  */
-uint8_t telemetry_voltage_to_percent(uint16_t mv)
-{
+uint8_t telemetry_voltage_to_percent(uint16_t mv) {
     /* Voltage thresholds for Li-ion */
     const uint16_t VBAT_FULL = 4200;    /* 100% */
     const uint16_t VBAT_NOMINAL = 3700; /* ~50% */
@@ -130,9 +126,8 @@ uint8_t telemetry_voltage_to_percent(uint16_t mv)
     }
 }
 
-void telemetry_format_battery(char *buf, size_t len, const struct telemetry_data *data)
-{
-    const char *status = "";
+void telemetry_format_battery(char* buf, size_t len, const struct telemetry_data* data) {
+    const char* status = "";
 
     if (data->is_charging) {
         status = " CHG";
@@ -140,19 +135,13 @@ void telemetry_format_battery(char *buf, size_t len, const struct telemetry_data
         status = " USB";
     }
 
-    snprintf(buf, len, "%d.%02dV %d%%%s",
-             data->battery_mv / 1000,
-             (data->battery_mv % 1000) / 10,
-             data->battery_pct,
+    snprintf(buf, len, "%d.%02dV %d%%%s", data->battery_mv / 1000, (data->battery_mv % 1000) / 10, data->battery_pct,
              status);
 }
 
-void telemetry_format_power(char *buf, size_t len, const struct telemetry_data *data)
-{
+void telemetry_format_power(char* buf, size_t len, const struct telemetry_data* data) {
     if (data->has_solar && data->solar_mv > 100) {
-        snprintf(buf, len, "Solar: %d.%02dV",
-                 data->solar_mv / 1000,
-                 (data->solar_mv % 1000) / 10);
+        snprintf(buf, len, "Solar: %d.%02dV", data->solar_mv / 1000, (data->solar_mv % 1000) / 10);
     } else {
         snprintf(buf, len, "No solar");
     }
