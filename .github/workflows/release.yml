@@ -120,21 +120,100 @@ jobs:
         run: |
           pio run -e ${{ matrix.environment }}
 
+      - name: Install esptool
+        run: |
+          pip install esptool
+
       - name: Prepare release artifacts
         run: |
           mkdir -p release-artifacts
-          # Find and copy firmware files
-          if [ -f .pio/build/${{ matrix.environment }}/firmware.bin ]; then
-            cp .pio/build/${{ matrix.environment }}/firmware.bin release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.bin
+          BUILD_DIR=".pio/build/${{ matrix.environment }}"
+
+          # Check if this is an ESP32 board (has bootloader.bin)
+          if [ -f "$BUILD_DIR/bootloader.bin" ] && [ -f "$BUILD_DIR/partitions.bin" ] && [ -f "$BUILD_DIR/firmware.bin" ]; then
+            echo "Creating merged binary for ESP32 board..."
+
+            # Auto-detect chip type from readelf
+            if readelf -h "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "xtensa"; then
+              # Xtensa-based ESP32
+              if readelf -A "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "esp32s3"; then
+                CHIP="esp32s3"
+              elif readelf -A "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "esp32s2"; then
+                CHIP="esp32s2"
+              else
+                CHIP="esp32"
+              fi
+            elif readelf -h "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "RISC-V"; then
+              # RISC-V based ESP32
+              if objdump -f "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "esp32c6"; then
+                CHIP="esp32c6"
+              elif objdump -f "$BUILD_DIR/firmware.elf" 2>/dev/null | grep -q "esp32c3"; then
+                CHIP="esp32c3"
+              else
+                CHIP="esp32c3"  # default RISC-V to C3
+              fi
+            else
+              # Fallback: detect from environment name
+              if echo "${{ matrix.environment }}" | grep -qE "(s3|t3s3|tdeck|v3|v4)"; then
+                CHIP="esp32s3"
+              elif echo "${{ matrix.environment }}" | grep -qE "(c3|ht62)"; then
+                CHIP="esp32c3"
+              elif echo "${{ matrix.environment }}" | grep -qE "(c6|c6l)"; then
+                CHIP="esp32c6"
+              else
+                CHIP="esp32"
+              fi
+            fi
+
+            # Auto-detect flash size from partition table
+            if [ -f "$BUILD_DIR/partitions.bin" ]; then
+              # Get total size from last partition
+              PARTITIONS_SIZE=$(stat -f%z "$BUILD_DIR/partitions.bin" 2>/dev/null || stat -c%s "$BUILD_DIR/partitions.bin" 2>/dev/null || echo "3072")
+
+              # Estimate flash size based on firmware size and partitions
+              FIRMWARE_SIZE=$(stat -f%z "$BUILD_DIR/firmware.bin" 2>/dev/null || stat -c%s "$BUILD_DIR/firmware.bin" 2>/dev/null || echo "0")
+
+              # Default flash sizes based on common configurations
+              if [ "$FIRMWARE_SIZE" -gt 2000000 ]; then
+                FLASH_SIZE="8MB"  # Large firmware needs 8MB+
+              elif [ "$FIRMWARE_SIZE" -gt 1000000 ]; then
+                FLASH_SIZE="4MB"  # Medium firmware needs 4MB
+              else
+                FLASH_SIZE="4MB"  # Default to 4MB
+              fi
+            else
+              FLASH_SIZE="4MB"
+            fi
+
+            echo "Detected chip: $CHIP, flash size: $FLASH_SIZE"
+
+            # Create merged binary with bootloader + partitions + firmware
+            python3 -m esptool \
+              --chip $CHIP \
+              merge_bin \
+              -o release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.bin \
+              --flash_mode dio \
+              --flash_size $FLASH_SIZE \
+              0x0 $BUILD_DIR/bootloader.bin \
+              0x8000 $BUILD_DIR/partitions.bin \
+              0x10000 $BUILD_DIR/firmware.bin
+
+            echo "✓ Merged binary created for $CHIP ($FLASH_SIZE)"
+          elif [ -f "$BUILD_DIR/firmware.bin" ]; then
+            # Non-ESP32 board or app-only binary
+            echo "Copying app-only binary (non-ESP32 or no bootloader)"
+            cp $BUILD_DIR/firmware.bin release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.bin
           fi
-          if [ -f .pio/build/${{ matrix.environment }}/firmware.elf ]; then
-            cp .pio/build/${{ matrix.environment }}/firmware.elf release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.elf
+
+          # Copy other firmware formats if they exist
+          if [ -f "$BUILD_DIR/firmware.elf" ]; then
+            cp $BUILD_DIR/firmware.elf release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.elf
           fi
-          if [ -f .pio/build/${{ matrix.environment }}/firmware.hex ]; then
-            cp .pio/build/${{ matrix.environment }}/firmware.hex release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.hex
+          if [ -f "$BUILD_DIR/firmware.hex" ]; then
+            cp $BUILD_DIR/firmware.hex release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.hex
           fi
-          if [ -f .pio/build/${{ matrix.environment }}/firmware.uf2 ]; then
-            cp .pio/build/${{ matrix.environment }}/firmware.uf2 release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.uf2
+          if [ -f "$BUILD_DIR/firmware.uf2" ]; then
+            cp $BUILD_DIR/firmware.uf2 release-artifacts/meshgrid-${{ matrix.environment }}-${GITHUB_REF_NAME}.uf2
           fi
 
       - name: Generate SHA256 checksums
