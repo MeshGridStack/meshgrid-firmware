@@ -8,6 +8,7 @@
 #include "power.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include "utils/debug.h"
 
 #ifdef BOARD_LILYGO_TBEAM
 
@@ -31,11 +32,11 @@ static int axp2101_init(void) {
     bool result = power.begin(Wire, AXP2101_SLAVE_ADDRESS, I2C_SDA, I2C_SCL);
 
     if (!result) {
-        Serial.println("[AXP2101] PMU not found, trying AXP192...");
+        DEBUG_INFO("[AXP2101] PMU not found, trying AXP192...");
         return -1; /* AXP2101 not found - might be v1.0/1.1 with AXP192 */
     }
 
-    Serial.printf("[AXP2101] Found chip ID: 0x%x\n", power.getChipID());
+    DEBUG_INFOF("[AXP2101] Found chip ID: 0x%x", power.getChipID());
 
     /* Configure power limits */
     power.setVbusVoltageLimit(XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
@@ -73,7 +74,7 @@ static int axp2101_init(void) {
     axp2101_initialized = true;
     delay(200); /* Give power rails time to stabilize */
 
-    Serial.println("[AXP2101] Initialization complete");
+    DEBUG_INFO("[AXP2101] Initialization complete");
     return 0;
 }
 

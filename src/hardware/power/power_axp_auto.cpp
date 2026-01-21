@@ -7,6 +7,7 @@
 
 #include "power.h"
 #include <Arduino.h>
+#include "utils/debug.h"
 
 #ifdef BOARD_LILYGO_TBEAM
 
@@ -17,24 +18,24 @@ extern const struct power_ops axp192_power_ops;
 static const struct power_ops* active_driver = NULL;
 
 static int axp_auto_init(void) {
-    Serial.println("[AXP] Auto-detecting power chip...");
+    DEBUG_INFO("[AXP] Auto-detecting power chip...");
 
     /* Try AXP2101 first (T-Beam v1.2) */
     if (axp2101_power_ops.init() == 0) {
-        Serial.println("[AXP] Detected AXP2101 (T-Beam v1.2)");
+        DEBUG_INFO("[AXP] Detected AXP2101 (T-Beam v1.2)");
         active_driver = &axp2101_power_ops;
         return 0;
     }
 
     /* Fall back to AXP192 (T-Beam v1.0/1.1) */
-    Serial.println("[AXP] Trying AXP192...");
+    DEBUG_INFO("[AXP] Trying AXP192...");
     if (axp192_power_ops.init() == 0) {
-        Serial.println("[AXP] Detected AXP192 (T-Beam v1.0/1.1)");
+        DEBUG_INFO("[AXP] Detected AXP192 (T-Beam v1.0/1.1)");
         active_driver = &axp192_power_ops;
         return 0;
     }
 
-    Serial.println("[AXP] ERROR: No AXP chip detected!");
+    DEBUG_ERROR("[AXP] No AXP chip detected!");
     return -1;
 }
 

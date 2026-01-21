@@ -330,10 +330,20 @@ bool radio_ok = true;
 
 void setup() {
     Serial.begin(115200);
-    delay(100);             /* Brief delay for serial init */
+    // ESP32-S3 USB CDC takes time to become active
+    // Wait for USB to be ready before sending any output
+    delay(2000);
+
+    Serial.println("\n=================================");
+    Serial.println("  MESHGRID - MeshCore Compatible");
+    Serial.print("  Firmware v"); Serial.println(MESHGRID_VERSION);
+    Serial.print("  Build: "); Serial.println(MESHGRID_BUILD_DATE);
+    Serial.println("=================================\n");
+
     serial_commands_init(); /* Clear serial buffers */
 
     board = &CURRENT_BOARD_CONFIG;
+    Serial.print("Board: "); Serial.print(board->vendor); Serial.print(" "); Serial.println(board->name);
 
     if (board->early_init) {
         board->early_init();
@@ -345,12 +355,16 @@ void setup() {
     /* Initialize I2C AFTER power - like MeshCore's board.begin() does */
     const struct display_pins* dpins = &board->display_pins;
     if (dpins->sda >= 0 && dpins->scl >= 0) {
+        DEBUG_INFOF("I2C init: SDA=%d SCL=%d", dpins->sda, dpins->scl);
         Wire.begin(dpins->sda, dpins->scl);
         delay(100); // Give I2C and OLED power time to stabilize
     }
 
     boot_time = millis();
     identity_init();
+    DEBUG_INFOF("Node: %s (0x%02X)", mesh.name, mesh.our_hash);
+    DEBUG_INFOF("Mode: %s", device_mode == MODE_REPEATER ? "REPEATER" : "CLIENT");
+
     init_public_channel();     // Initialize MeshCore public channel
     tx_queue_init();           // Initialize packet transmission queue
     config_load();             // Load saved radio config from flash
@@ -366,7 +380,13 @@ void setup() {
 
     button_setup();
     telemetry_init();
+    DEBUG_INFO("Initializing display...");
     display_init(&display);
+    if (display) {
+        DEBUG_INFO("Display initialized OK");
+    } else {
+        DEBUG_WARN("Display init failed or not present");
+    }
     display_state_init(&display_state);
 
     /* Board-specific late initialization (e.g., display contrast) */
@@ -386,10 +406,18 @@ void setup() {
     }
 
     /* Initialize advertisement system (bloom filters for v1) */
+    DEBUG_INFO("Initializing advertisement system...");
     advert_auto_init();
 
+    DEBUG_INFO("Initializing radio...");
     radio_ok = (radio_init() == 0);
-    if (radio_ok) {
+    if (!radio_ok) {
+        DEBUG_ERROR("Radio init failed");
+        Serial.println("FATAL: Radio init failed");
+        Serial.println("Serial CLI still available for debugging");
+        // DON'T hang - allow serial CLI to work for debugging
+    } else {
+        DEBUG_INFO("Radio init OK");
         int rx_state = radio()->startReceive();
         DEBUG_INFOF("startReceive() returned: %d (ISR attached, DIO0=%d, DIO1=%d)", rx_state, board->radio_pins.dio0,
                     board->radio_pins.dio1);
@@ -400,7 +428,16 @@ void setup() {
     /* Initialize BLE UART service for wireless serial access */
     char ble_name[32];
     snprintf(ble_name, sizeof(ble_name), "meshgrid-%02X", mesh.our_hash);
-    ble_serial_init(ble_name);
+    if (ble_serial_init(ble_name) == 0) {
+        DEBUG_INFOF("BLE UART service: %s", ble_name);
+    }
+#endif
+
+    Serial.println("\nReady! Type /help for commands.\n");
+#ifdef ENABLE_BLE
+    Serial.println("Connect via USB Serial or Bluetooth (BLE UART)");
+#else
+    Serial.println("Connect via USB Serial");
 #endif
 }
 
@@ -416,7 +453,12 @@ void loop() {
         tx_queue_process();
     }
 
-    /* ISR trigger count tracked internally (removed debug output) */
+    /* Debug: Print ISR trigger count every 10 seconds */
+    static uint32_t last_isr_debug = 0;
+    if (millis() - last_isr_debug > 10000) {
+        DEBUG_INFOF("ISR count: %lu", isr_trigger_count);
+        last_isr_debug = millis();
+    }
 
     /* Handle serial commands (USB + BLE) */
     handle_serial();
