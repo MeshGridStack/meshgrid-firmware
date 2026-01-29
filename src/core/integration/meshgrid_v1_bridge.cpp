@@ -80,7 +80,7 @@ int meshgrid_v1_send_text(uint16_t dest_hash_v1, const char* text, size_t len) {
 
     /* Find neighbor by scanning for matching v1 hash */
     struct meshgrid_neighbor* neighbor = nullptr;
-    for (int i = 0; i < neighbor_count; i++) {
+    for (uint16_t i = 0; i < neighbor_count; i++) {
         uint16_t n_hash_v1 = meshgrid_v1_hash_pubkey(neighbors[i].pubkey);
         if (n_hash_v1 == dest_hash_v1) {
             neighbor = &neighbors[i];
@@ -446,7 +446,7 @@ int meshgrid_v1_process_packet(const uint8_t* packet, size_t len, int16_t rssi, 
         pos += 4;
 
         /* Find sender by v1 hash */
-        for (int i = 0; i < neighbor_count; i++) {
+        for (uint16_t i = 0; i < neighbor_count; i++) {
             uint16_t n_hash_v1 = meshgrid_v1_hash_pubkey(neighbors[i].pubkey);
             if (n_hash_v1 == src_hash) {
                 sender = &neighbors[i];

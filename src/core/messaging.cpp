@@ -210,9 +210,17 @@ void process_packet(uint8_t* buf, int len, int16_t rssi, int8_t snr) {
                     return;
                 } else {
                     /* Check if we're the next hop in the path */
+                    /* SECURITY: Bounds check before array access */
+                    if (i + offset >= pkt.payload_len) {
+                        return; /* Invalid offset - reject packet */
+                    }
                     uint8_t hash_at_offset = pkt.payload[i + offset];
                     if (hash_at_offset == mesh.our_hash) {
                         /* We're on the path - append SNR and forward */
+                        /* SECURITY: Bounds check before appending to path array */
+                        if (pkt.path_len >= MESHGRID_MAX_PATH_SIZE) {
+                            return; /* Path full - cannot forward */
+                        }
                         int8_t snr_value = (int8_t)(snr * 4);
                         pkt.path[pkt.path_len] = (uint8_t)snr_value;
                         pkt.path_len++;
@@ -235,6 +243,11 @@ void process_packet(uint8_t* buf, int len, int16_t rssi, int8_t snr) {
                 uint32_t trace_id;
                 memcpy(&trace_id, &pkt.payload[0], 4);
                 uint8_t hop_count = pkt.payload[4];
+
+                /* SECURITY: Validate hop_count against actual payload size */
+                if (hop_count > (pkt.payload_len - 5)) {
+                    hop_count = pkt.payload_len - 5;
+                }
 
                 /* Build JSON response */
                 String json = "{\"type\":\"trace_response\",\"trace_id\":";

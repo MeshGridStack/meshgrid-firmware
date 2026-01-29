@@ -1,68 +1,96 @@
 /**
  * Protocol Auto - Advertisement Implementation
  *
- * Automatically dispatches to v0 or v1 advertisement handlers
+ * Automatically dispatches to v0 or v1 advertisement handlers based on build flags:
+ * - PROTOCOL_V0_ENABLED: Enable v0 (MeshCore) protocol
+ * - PROTOCOL_V1_ENABLED: Enable v1 (meshgrid enhanced) protocol
  */
 
 #include "advert_auto.h"
 #include <Arduino.h>
 
+/* Need full struct definition */
+extern "C" {
+#include "network/protocol.h"
+}
+
 /* Protocol version availability */
 #ifndef PROTOCOL_V0_ENABLED
-  #define PROTOCOL_V0_ENABLED 1
+  #define PROTOCOL_V0_ENABLED 1  /* v0 enabled by default */
 #endif
 
-/* Protocol packet structure */
-#define MESHGRID_MAX_PAYLOAD_SIZE 200
-#define MESHGRID_MAX_PATH_SIZE 8
-
-struct meshgrid_packet {
-    uint8_t header;
-    uint8_t route_type;
-    uint8_t payload_type;
-    uint8_t version;
-    uint16_t transport_codes[2];
-    uint8_t path[MESHGRID_MAX_PATH_SIZE];
-    uint8_t path_len;
-    uint8_t payload[MESHGRID_MAX_PAYLOAD_SIZE];
-    uint16_t payload_len;
-    int16_t rssi;
-    int8_t snr;
-};
+#ifndef PROTOCOL_V1_ENABLED
+  #define PROTOCOL_V1_ENABLED 0  /* v1 disabled by default */
+#endif
 
 /* Protocol-specific advertisement headers */
 #if PROTOCOL_V0_ENABLED
-  #include <advert_v0.h>
+  #include "advert_v0.h"
 #endif
 
-/* Packet version constants */
-#define PAYLOAD_VER_MESHCORE 0
+#if PROTOCOL_V1_ENABLED
+  extern "C" {
+    #include "../../meshgrid-v1/src/integration/meshgrid_v1_bridge.h"
+  }
+#endif
 
 /**
  * Initialize advertisement system
  */
 void advert_auto_init(void) {
-    /* No initialization needed for v0 protocol */
+#if PROTOCOL_V1_ENABLED
+    meshgrid_v1_init();
+#endif
+    /* v0 needs no initialization */
 }
 
 /**
- * Send advertisement using v0 protocol (MeshCore compatible)
+ * Send advertisement (auto-selects protocol)
  */
 void advert_auto_send(uint8_t route_type) {
-#if PROTOCOL_V0_ENABLED
+#if PROTOCOL_V1_ENABLED
+    /* Use v1 protocol if enabled */
+    meshgrid_v1_send_advert(route_type);
+#elif PROTOCOL_V0_ENABLED
+    /* Fall back to v0 if v1 not enabled */
     advert_v0_send(route_type);
 #else
-    #error "Protocol v0 must be enabled"
+    #error "At least one protocol (v0 or v1) must be enabled"
 #endif
 }
 
 /**
- * Handle received advertisement (v0 protocol)
+ * Handle received advertisement (auto-detects protocol version)
+ * Keeps v0 signature for backwards compatibility
  */
 void advert_auto_receive(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
-#if PROTOCOL_V0_ENABLED
-    advert_v0_receive(pkt, rssi, snr);
-#else
-    #error "Protocol v0 must be enabled"
+    if (pkt == NULL) {
+        return;
+    }
+
+    /* Check protocol version */
+    uint8_t version = pkt->version;
+
+#if PROTOCOL_V1_ENABLED
+    if (version == 1) {
+        /* v1 protocol packet - encode back to buffer for v1 handler */
+        uint8_t buf[256];
+        int len = meshgrid_packet_encode(pkt, buf, sizeof(buf));
+        if (len > 0) {
+            meshgrid_v1_receive_advert(buf, len, rssi, snr);
+        }
+        /* TODO: Add error logging for failed encoding */
+        return;
+    }
 #endif
+
+#if PROTOCOL_V0_ENABLED
+    if (version == 0) {
+        /* v0 protocol packet - handled by MeshCore callbacks */
+        /* This function exists for compatibility */
+        return;
+    }
+#endif
+
+    /* Unknown protocol version */
 }

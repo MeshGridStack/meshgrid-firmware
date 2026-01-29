@@ -263,6 +263,28 @@ int meshgrid_parse_advert(const struct meshgrid_packet *pkt,
                           uint8_t *pubkey, char *name, size_t name_max,
                           uint32_t *timestamp);
 
+/* Create v1 advertisement with bloom filters (meshgrid v1 enhanced) */
+int meshgrid_create_advert_with_bloom(
+    struct meshgrid_packet *pkt,
+    const uint8_t *pubkey,
+    const char *name,
+    uint32_t timestamp,
+    const void *bloom_filters  /* struct meshgrid_bloom_set* */
+);
+
+/* Parse v1 advertisement with bloom filters */
+int meshgrid_parse_advert_with_bloom(
+    const struct meshgrid_packet *pkt,
+    uint8_t *pubkey,
+    char *name,
+    size_t name_max,
+    uint32_t *timestamp,
+    void *bloom_filters  /* struct meshgrid_bloom_set* or NULL */
+);
+
+/* Compute 2-byte v1 hash from public key (enhanced mode) */
+uint16_t meshgrid_v1_hash_pubkey(const uint8_t *pubkey);
+
 #ifdef __cplusplus
 }
 #endif

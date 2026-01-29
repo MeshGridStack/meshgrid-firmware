@@ -83,6 +83,7 @@ extern "C" {
 /* ===== User Interface ===== */
 #include "ui/screens.h"
 #include "ui/button.h"
+#include "ui/boot_animation.h"
 
 /*
  * MeshCore Public Channel (for group messaging support)
@@ -394,15 +395,8 @@ void setup() {
         board->late_init();
 
     if (display) {
-        display->clearDisplay();
-        display->setTextSize(2);
-        display->setCursor(10, 20);
-        display->println("MESHGRID");
-        display->setTextSize(1);
-        display->setCursor(20, 45);
-        display->println(board->name);
-        display->display();
-        delay(1500);
+        /* Show animated boot sequence */
+        show_boot_animation(display);
     }
 
     /* Initialize advertisement system (bloom filters for v1) */
