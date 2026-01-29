@@ -251,20 +251,21 @@ void cmd_time(const String& timestr) {
 
 void cmd_pin(const String& subcmd) {
     if (subcmd == "show") {
-        response_print("PIN: ");
+        response_print("BLE PIN: ");
         response_print(security.pin);
-        response_print("\nStatus: ");
-        response_println(security.pin_enabled ? "ENABLED" : "DISABLED");
+        response_print("\nSerial Auth: ");
+        response_println(security.serial_auth_enabled ? "ENABLED" : "DISABLED");
     } else if (subcmd.startsWith("set ")) {
         String new_pin = subcmd.substring(4);
         new_pin.trim();
         security_set_pin(new_pin.c_str());
     } else if (subcmd == "enable") {
-        security_enable_pin();
+        security_enable_serial_auth();
     } else if (subcmd == "disable") {
-        security_disable_pin();
+        security_disable_serial_auth();
     } else {
         response_println("ERR Unknown PIN command");
+        response_println("Usage: PIN show|enable|disable|set <6-digit>");
     }
     display_state.dirty = true;
 }

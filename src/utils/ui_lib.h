@@ -178,10 +178,14 @@ static inline bool ui_draw_list(Adafruit_SSD1306* display, struct ui_list_item* 
 
 /**
  * Truncate text to fit within max_chars, adding "..." if needed
+ * SECURITY: Uses strncpy to prevent buffer overflow
  */
 static inline void ui_truncate_text(char* dest, const char* src, int max_chars) {
-    if (strlen(src) <= max_chars) {
-        strcpy(dest, src);
+    size_t src_len = strlen(src);
+    if (src_len <= (size_t)max_chars) {
+        // Safe copy with bounds check
+        strncpy(dest, src, max_chars);
+        dest[max_chars] = '\0'; // Ensure null termination
     } else {
         strncpy(dest, src, max_chars - 3);
         dest[max_chars - 3] = '.';

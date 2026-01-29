@@ -11,11 +11,13 @@
  * Security state
  */
 struct device_security {
-    char pin[7];             // 6 digits + null terminator
-    bool pin_enabled;        // Enable/disable PIN requirement
-    bool authenticated;      // Current session authenticated
-    uint8_t failed_attempts; // Failed auth attempts
-    uint32_t lockout_until;  // Timestamp for lockout end
+    char pin[7];                  // BLE pairing PIN (6 digits + null)
+    char serial_password[33];     // Serial/USB password (up to 32 chars + null)
+    bool serial_auth_enabled;     // Enable/disable serial password requirement
+    bool authenticated;           // Current session authenticated
+    uint8_t failed_attempts;      // Failed auth attempts
+    uint32_t lockout_until;       // Timestamp for lockout end
+    uint32_t last_activity_ms;    // Last authenticated command timestamp
 };
 
 extern struct device_security security;
@@ -45,18 +47,23 @@ bool security_authenticate(const char* pin);
 bool security_is_locked(void);
 
 /**
- * Set new PIN (requires authentication)
+ * Set new BLE PIN (requires authentication)
  */
 bool security_set_pin(const char* new_pin);
 
 /**
- * Disable PIN requirement (requires authentication)
+ * Set serial password (requires authentication or first-time setup)
  */
-void security_disable_pin(void);
+bool security_set_serial_password(const char* new_password);
 
 /**
- * Enable PIN requirement
+ * Disable serial authentication (requires authentication)
  */
-void security_enable_pin(void);
+void security_disable_serial_auth(void);
+
+/**
+ * Enable serial authentication
+ */
+void security_enable_serial_auth(void);
 
 #endif // MESHGRID_SECURITY_H

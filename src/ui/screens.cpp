@@ -234,15 +234,18 @@ void draw_screen_neighbors(Adafruit_SSD1306* display, struct display_state* stat
 
 void draw_screen_messages(Adafruit_SSD1306* display, struct display_state* state) {
     char line[32];
+    struct ui_layout layout;
 
     /* Count total unread/recent messages */
     int total_messages = public_msg_count + direct_msg_count;
-    snprintf(line, sizeof(line), "MESSAGES (%d)", total_messages);
+    snprintf(line, sizeof(line), "MSG (%dP+%dD)", public_msg_count, direct_msg_count);
     draw_header(display, line);
 
     if (total_messages == 0) {
-        ui_draw_centered_text(display, UI_CONTENT_TOP + 14, "No messages");
-        ui_draw_centered_text(display, UI_CONTENT_TOP + 26, "yet");
+        ui_layout_init(&layout, display);
+        ui_layout_add_gap(&layout, 10);
+        ui_layout_add_line_centered(&layout, "No messages");
+        ui_layout_add_line_centered(&layout, "yet");
     } else {
         /* Show recent messages with scroll */
         const int max_visible = 4;
@@ -261,15 +264,16 @@ void draw_screen_messages(Adafruit_SSD1306* display, struct display_state* state
             if (!msg->valid)
                 continue;
 
-            /* Line format: [Sender] Message preview... */
-            char sender_short[10];
-            ui_truncate_text(sender_short, msg->sender_name, 8);
+            /* Line format: [Badge] Sender: Message preview */
+            char sender_short[8];
+            ui_truncate_text(sender_short, msg->sender_name, 7);
 
-            char text_preview[16];
-            ui_truncate_text(text_preview, msg->text, 15);
+            char text_preview[14];
+            ui_truncate_text(text_preview, msg->text, 13);
 
-            snprintf(line, sizeof(line), "%s: %s", sender_short, text_preview);
-            display->setCursor(0, y);
+            /* Show [P] for public channel messages */
+            snprintf(line, sizeof(line), "[P]%s:%s", sender_short, text_preview);
+            display->setCursor(2, y);
             display->print(line);
 
             /* Show age on right */
@@ -295,14 +299,15 @@ void draw_screen_messages(Adafruit_SSD1306* display, struct display_state* state
             if (!msg->valid)
                 continue;
 
-            char sender_short[10];
-            ui_truncate_text(sender_short, msg->sender_name, 8);
+            char sender_short[8];
+            ui_truncate_text(sender_short, msg->sender_name, 7);
 
             char text_preview[14];
             ui_truncate_text(text_preview, msg->text, 13);
 
-            snprintf(line, sizeof(line), "[%s] %s", sender_short, text_preview);
-            display->setCursor(0, y);
+            /* Show [D] for direct messages */
+            snprintf(line, sizeof(line), "[D]%s:%s", sender_short, text_preview);
+            display->setCursor(2, y);
             display->print(line);
 
             uint32_t age_sec = (millis() - msg->timestamp) / 1000;
@@ -428,22 +433,22 @@ void draw_screen_security(Adafruit_SSD1306* display) {
     draw_header(display, "SECURITY");
     ui_layout_init(&layout, display);
 
-    /* PIN label (centered, large) */
+    /* BLE PIN label (centered, large) */
     display->setTextSize(2);
-    int pin_label_width = 5 * 12; /* "PIN:" = 5 chars * 12px (size 2) */
+    int pin_label_width = 8 * 12; /* "BLE PIN:" = 8 chars * 12px */
     display->setCursor((128 - pin_label_width) / 2, layout.current_y);
-    display->print("PIN:");
+    display->print("BLE PIN:");
     layout.current_y += 18;
 
-    /* PIN value (centered, large) */
+    /* BLE PIN value (centered, large) */
     int pin_width = strlen(security.pin) * 12; /* Size 2 font = 12px per char */
     display->setCursor((128 - pin_width) / 2, layout.current_y);
     display->print(security.pin);
-    layout.current_y += 20;
+    layout.current_y += 18;
 
-    /* Status (normal size) */
+    /* Serial auth status (normal size) */
     display->setTextSize(1);
-    snprintf(line, sizeof(line), "Auth: %s", security.pin_enabled ? "ON" : "OFF");
+    snprintf(line, sizeof(line), "Serial: %s", security.serial_auth_enabled ? "ON" : "OFF");
     ui_layout_add_line(&layout, line);
 
     /* Instructions (if space available) */

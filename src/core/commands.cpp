@@ -80,14 +80,66 @@ static void process_command(const String& cmd) {
         return;
     }
 
-    /* AUTH command (always allowed) */
+    /* AUTH STATUS command (check first, before AUTH <password>) */
+    if (cmd == "AUTH STATUS") {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "OK Serial: %s | BLE PIN: %s",
+                 security.serial_auth_enabled ? "ON" : "OFF",
+                 security.pin);
+        response_println(buf);
+        return;
+    }
+
+    /* AUTH ENABLE command (always allowed to enable protection) */
+    if (cmd == "AUTH ENABLE") {
+        security_enable_serial_auth();
+        response_println("OK Serial auth enabled");
+        return;
+    }
+
+    /* AUTH DISABLE command (requires authentication - check before AUTH <password>) */
+    if (cmd == "AUTH DISABLE") {
+        if (!security_check_auth()) {
+            response_println("ERR Not authenticated. Send: AUTH <password>");
+            return;
+        }
+        security_disable_serial_auth();
+        response_println("OK Serial auth disabled");
+        return;
+    }
+
+    /* AUTH <password> command (authenticate) */
     if (cmd.startsWith("AUTH ")) {
-        String pin = cmd.substring(5);
-        pin.trim();
-        if (security_authenticate(pin.c_str())) {
+        String password = cmd.substring(5);
+        password.trim();
+        if (security_authenticate(password.c_str())) {
             response_println("OK Authenticated");
         } else {
-            response_println("ERR Invalid PIN");
+            response_println("ERR Invalid password");
+        }
+        return;
+    }
+
+    /* SETPASS command (always allowed for initial setup) */
+    if (cmd.startsWith("SETPASS ")) {
+        String new_password = cmd.substring(8);
+        new_password.trim();
+        if (security_set_serial_password(new_password.c_str())) {
+            response_println("OK Password set");
+        } else {
+            response_println("ERR Password must be 4-32 characters");
+        }
+        return;
+    }
+
+    /* SETPIN command (set BLE PIN) */
+    if (cmd.startsWith("SETPIN ")) {
+        String new_pin = cmd.substring(7);
+        new_pin.trim();
+        if (security_set_pin(new_pin.c_str())) {
+            response_println("OK BLE PIN set");
+        } else {
+            response_println("ERR PIN must be 6 digits");
         }
         return;
     }
@@ -99,7 +151,7 @@ static void process_command(const String& cmd) {
             String resp = "ERR Device locked for " + String(remaining) + " seconds";
             response_println(resp);
         } else {
-            response_println("ERR Not authenticated. Send: AUTH <pin>");
+            response_println("ERR Not authenticated. Send: AUTH <password>");
         }
         return;
     }
