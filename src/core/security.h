@@ -11,13 +11,13 @@
  * Security state
  */
 struct device_security {
-    char pin[7];                  // BLE pairing PIN (6 digits + null)
-    char serial_password[33];     // Serial/USB password (up to 32 chars + null)
-    bool serial_auth_enabled;     // Enable/disable serial password requirement
-    bool authenticated;           // Current session authenticated
-    uint8_t failed_attempts;      // Failed auth attempts
-    uint32_t lockout_until;       // Timestamp for lockout end
-    uint32_t last_activity_ms;    // Last authenticated command timestamp
+    char pin[7];               // BLE pairing PIN (6 digits + null)
+    char serial_password[33];  // Serial/USB password (up to 32 chars + null)
+    bool serial_auth_enabled;  // Enable/disable serial password requirement
+    bool authenticated;        // Current session authenticated
+    uint8_t failed_attempts;   // Failed auth attempts
+    uint32_t lockout_until;    // Timestamp for lockout end
+    uint32_t last_activity_ms; // Last authenticated command timestamp
 };
 
 extern struct device_security security;

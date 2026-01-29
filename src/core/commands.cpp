@@ -83,8 +83,7 @@ static void process_command(const String& cmd) {
     /* AUTH STATUS command (check first, before AUTH <password>) */
     if (cmd == "AUTH STATUS") {
         char buf[64];
-        snprintf(buf, sizeof(buf), "OK Serial: %s | BLE PIN: %s",
-                 security.serial_auth_enabled ? "ON" : "OFF",
+        snprintf(buf, sizeof(buf), "OK Serial: %s | BLE PIN: %s", security.serial_auth_enabled ? "ON" : "OFF",
                  security.pin);
         response_println(buf);
         return;

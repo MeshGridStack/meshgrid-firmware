@@ -40,7 +40,7 @@ static inline uint32_t get_current_timestamp(void) {
 extern struct message_entry direct_messages[];
 extern int direct_msg_index;
 extern int direct_msg_count;
-#define DIRECT_MESSAGE_BUFFER_SIZE 10
+/* DIRECT_MESSAGE_BUFFER_SIZE is defined in utils/memory.h */
 
 /* v1 protocol state */
 static bool v1_initialized = false;
