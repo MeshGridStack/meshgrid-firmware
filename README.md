@@ -11,7 +11,9 @@ This project is not affiliated with, endorsed by, or an official part of the Mes
 
 ## For MeshCore-Compatible Networks
 
-**meshgrid** builds on MeshCore v0 with a more secure v1 protocol (AES-256-GCM, authentication, replay protection) while staying fully compatible. We've also created **meshgrid-cli** for device management and flashing. The firmware automatically uses v1 when supported, v0 for compatibility.
+**meshgrid** builds on MeshCore v0 with a more secure v1 protocol (AES-256-GCM, authentication, replay protection) while staying fully compatible. We've also created **[meshgrid-cli](https://github.com/MeshGridStack/meshgrid-cli)** for device management and flashing. The firmware automatically uses v1 when supported, v0 for compatibility.
+
+**CLI Tool:** Manage devices, flash firmware, send messages, and configure settings with [meshgrid-cli](https://github.com/MeshGridStack/meshgrid-cli)
 
 ## Features
 
