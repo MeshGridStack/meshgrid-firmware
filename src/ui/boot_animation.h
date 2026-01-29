@@ -13,9 +13,10 @@
  * Loops continuously for specified duration
  */
 static inline void show_boot_animation(Adafruit_SSD1306* display, uint32_t duration_ms = 2000) {
-    if (!display) return;
+    if (!display)
+        return;
 
-    const int frame_delay = 50; // ms per frame
+    const int frame_delay = 50;      // ms per frame
     const int frames_per_cycle = 30; // Frames before loop repeats
     uint32_t start_time = millis();
     int frame = 0;

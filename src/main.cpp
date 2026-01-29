@@ -337,14 +337,19 @@ void setup() {
 
     Serial.println("\n=================================");
     Serial.println("  MESHGRID - MeshCore Compatible");
-    Serial.print("  Firmware v"); Serial.println(MESHGRID_VERSION);
-    Serial.print("  Build: "); Serial.println(MESHGRID_BUILD_DATE);
+    Serial.print("  Firmware v");
+    Serial.println(MESHGRID_VERSION);
+    Serial.print("  Build: ");
+    Serial.println(MESHGRID_BUILD_DATE);
     Serial.println("=================================\n");
 
     serial_commands_init(); /* Clear serial buffers */
 
     board = &CURRENT_BOARD_CONFIG;
-    Serial.print("Board: "); Serial.print(board->vendor); Serial.print(" "); Serial.println(board->name);
+    Serial.print("Board: ");
+    Serial.print(board->vendor);
+    Serial.print(" ");
+    Serial.println(board->name);
 
     if (board->early_init) {
         board->early_init();

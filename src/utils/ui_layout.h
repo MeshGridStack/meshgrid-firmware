@@ -15,13 +15,13 @@
  */
 struct ui_layout {
     Adafruit_SSD1306* display;
-    int current_y;          /* Current Y position for next element */
-    int content_start_y;    /* Top of content area (below header) */
-    int content_end_y;      /* Bottom of content area (above footer) */
-    int left_margin;        /* Left margin for all content */
-    int right_margin;       /* Right margin for all content */
-    int line_height;        /* Height of one text line */
-    int line_spacing;       /* Spacing between lines */
+    int current_y;       /* Current Y position for next element */
+    int content_start_y; /* Top of content area (below header) */
+    int content_end_y;   /* Bottom of content area (above footer) */
+    int left_margin;     /* Left margin for all content */
+    int right_margin;    /* Right margin for all content */
+    int line_height;     /* Height of one text line */
+    int line_spacing;    /* Spacing between lines */
 };
 
 /**
@@ -30,12 +30,12 @@ struct ui_layout {
  */
 static inline void ui_layout_init(struct ui_layout* layout, Adafruit_SSD1306* display) {
     layout->display = display;
-    layout->content_start_y = 12;  /* Below header (11px header + 1px gap) */
-    layout->content_end_y = 56;    /* Above footer (64 - 8px footer) */
+    layout->content_start_y = 12; /* Below header (11px header + 1px gap) */
+    layout->content_end_y = 56;   /* Above footer (64 - 8px footer) */
     layout->left_margin = 2;
     layout->right_margin = 2;
-    layout->line_height = 8;       /* Standard font height */
-    layout->line_spacing = 10;     /* Spacing between lines */
+    layout->line_height = 8;   /* Standard font height */
+    layout->line_spacing = 10; /* Spacing between lines */
     layout->current_y = layout->content_start_y;
 }
 
@@ -162,7 +162,8 @@ static inline bool ui_layout_add_line_centered(struct ui_layout* layout, const c
  * texts: array of text strings for each column
  * count: number of columns
  */
-static inline bool ui_layout_add_grid_row(struct ui_layout* layout, const int* positions, const char** texts, int count) {
+static inline bool ui_layout_add_grid_row(struct ui_layout* layout, const int* positions, const char** texts,
+                                          int count) {
     if (!ui_layout_can_fit_line(layout)) {
         return false;
     }
@@ -208,4 +209,3 @@ static inline void ui_layout_next_line(struct ui_layout* layout) {
 }
 
 #endif // MESHGRID_UI_LAYOUT_H
-

@@ -73,9 +73,9 @@ static const struct board_config lilygo_tbeam_config = {
             .tx_power = 20,
             .preamble_len = 8,
             .use_crc = true,
-            .tcxo_voltage = 0.0,       // No TCXO on T-Beam
+            .tcxo_voltage = 0.0,        // No TCXO on T-Beam
             .dio2_as_rf_switch = false, // SX1276 doesn't use DIO2 as RF switch
-            .sync_word = 0,            // Use RadioLib default for SX1276
+            .sync_word = 0,             // Use RadioLib default for SX1276
         },
 
     .radio_ops = NULL, /* Auto-detect from radio type */

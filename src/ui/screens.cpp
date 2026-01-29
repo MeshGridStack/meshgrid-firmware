@@ -436,11 +436,9 @@ void draw_screen_security(Adafruit_SSD1306* display) {
     layout.current_y += 18;
 
     /* PIN value (centered, large) */
-    char pin_str[8];
-    snprintf(pin_str, sizeof(pin_str), "%d", security.pin);
-    int pin_width = strlen(pin_str) * 12; /* Size 2 font = 12px per char */
+    int pin_width = strlen(security.pin) * 12; /* Size 2 font = 12px per char */
     display->setCursor((128 - pin_width) / 2, layout.current_y);
-    display->print(pin_str);
+    display->print(security.pin);
     layout.current_y += 20;
 
     /* Status (normal size) */

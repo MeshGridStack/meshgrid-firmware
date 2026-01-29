@@ -16,22 +16,22 @@ extern "C" {
 
 /* Protocol version availability */
 #ifndef PROTOCOL_V0_ENABLED
-  #define PROTOCOL_V0_ENABLED 1  /* v0 enabled by default */
+#    define PROTOCOL_V0_ENABLED 1 /* v0 enabled by default */
 #endif
 
 #ifndef PROTOCOL_V1_ENABLED
-  #define PROTOCOL_V1_ENABLED 0  /* v1 disabled by default */
+#    define PROTOCOL_V1_ENABLED 0 /* v1 disabled by default */
 #endif
 
 /* Protocol-specific advertisement headers */
 #if PROTOCOL_V0_ENABLED
-  #include "advert_v0.h"
+#    include "advert_v0.h"
 #endif
 
 #if PROTOCOL_V1_ENABLED
-  extern "C" {
-    #include "../../meshgrid-v1/src/integration/meshgrid_v1_bridge.h"
-  }
+extern "C" {
+#    include "../../meshgrid-v1/src/integration/meshgrid_v1_bridge.h"
+}
 #endif
 
 /**
@@ -55,7 +55,7 @@ void advert_auto_send(uint8_t route_type) {
     /* Fall back to v0 if v1 not enabled */
     advert_v0_send(route_type);
 #else
-    #error "At least one protocol (v0 or v1) must be enabled"
+#    error "At least one protocol (v0 or v1) must be enabled"
 #endif
 }
 
@@ -63,7 +63,7 @@ void advert_auto_send(uint8_t route_type) {
  * Handle received advertisement (auto-detects protocol version)
  * Keeps v0 signature for backwards compatibility
  */
-void advert_auto_receive(struct meshgrid_packet *pkt, int16_t rssi, int8_t snr) {
+void advert_auto_receive(struct meshgrid_packet* pkt, int16_t rssi, int8_t snr) {
     if (pkt == NULL) {
         return;
     }
