@@ -4,9 +4,13 @@
 
 Distributed over-the-air (OTA) firmware updates for ESP32-based meshgrid devices. Updates propagate through the mesh network via epidemic gossip protocol, surviving node failures and network partitions. Secured with Ed25519 signatures, auto-applied when battery levels are safe.
 
-**Status:** Design phase - not yet implemented
+**Status:** Implementation ready - core library complete, integration in progress
+
+**Current Firmware Sizes:** 564 KB (Heltec V3), 552 KB (T3S3) - 3,322 chunks @ 174 bytes
 
 **Key Differentiator:** MeshCore does NOT support mesh OTA. This feature makes meshgrid uniquely suited for distributed "war mesh" deployments where physical access to devices is impractical.
+
+**See Also:** [OTA_WORKFLOW.md](OTA_WORKFLOW.md) - Complete deployment workflow and implementation plan
 
 ## Architecture
 
@@ -347,7 +351,7 @@ spiffs,     data, spiffs,  0x3D0000, 0x30000,  # File system
 **Flash requirements:**
 - Minimum: 4MB flash
 - Recommended: 8MB+ (typical on ESP32-S3)
-- Current firmware: ~492KB (fits comfortably in 1.875MB partitions)
+- Current firmware: ~564KB (fits comfortably in 1.625MB-3MB OTA partitions)
 
 ### ESP32 Update API
 
@@ -750,7 +754,7 @@ Sends OTA_ABORT packet (floods network), all nodes discard session state.
 
 ### Timing Estimates
 
-**For 492KB firmware (2,808 chunks @ 174 bytes):**
+**For 564KB firmware (3,322 chunks @ 174 bytes):**
 
 | Scenario | Duration | Notes |
 |----------|----------|-------|

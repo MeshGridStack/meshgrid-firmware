@@ -48,13 +48,15 @@ try:
 except:
     git_hash = ""
 
-# Get build date
+# Get build date and timestamp
 build_date = datetime.now().strftime("%Y-%m-%d")
+build_timestamp = int(datetime.now().timestamp())  # Unix epoch
 
 # Set build flags
 env.Append(CPPDEFINES=[
     ("MESHGRID_VERSION", f'\\"{version}\\"'),
     ("MESHGRID_BUILD_DATE", f'\\"{build_date}\\"'),
+    ("MESHGRID_BUILD_TIMESTAMP", f'{build_timestamp}'),  # Full date+time as epoch
     ("MESHGRID_GIT_HASH", f'\\"{git_hash}\\"'),
 ])
 

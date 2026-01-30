@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "utils/debug.h"
+#include "version.h"
 #include <Arduino.h>
 #if defined(ARCH_ESP32) || defined(ARCH_ESP32S3) || defined(ARCH_ESP32C3) || defined(ARCH_ESP32C6)
 #    include <Preferences.h>
@@ -111,6 +112,16 @@ void config_load(void) {
         rtc_time.epoch_at_boot = prefs.getUInt("rtc_epoch", 0);
         rtc_time.valid = true;
         DEBUG_INFO("Loaded RTC time from flash");
+    } else if (MESHGRID_BUILD_TIMESTAMP > 0) {
+        /* First boot: use build timestamp as initial time */
+        rtc_time.epoch_at_boot = MESHGRID_BUILD_TIMESTAMP - (millis() / 1000);
+        rtc_time.valid = true;
+
+        /* Save to NVS */
+        prefs.putBool("rtc_valid", true);
+        prefs.putUInt("rtc_epoch", rtc_time.epoch_at_boot);
+
+        DEBUG_INFO("Initialized RTC time from build timestamp");
     }
 
     prefs.end();

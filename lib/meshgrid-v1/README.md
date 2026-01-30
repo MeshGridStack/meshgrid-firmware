@@ -76,7 +76,7 @@ The library is complete and self-contained. Integration involves:
 2. Initializing bloom filters and beacon scheduling in your main application
 3. Using `meshgrid_create_advert_with_bloom()` to send v1 advertisements
 4. Using `meshgrid_parse_advert_with_bloom()` to receive v1 advertisements
-5. See `docs/PROTOCOL_V1_PRACTICAL.md` for detailed integration guide
+5. See integration example in `src/core/integration/meshgrid_v1_bridge.cpp`
 
 ## Protocol Versions
 
@@ -134,10 +134,10 @@ MIT License - See LICENSE file for details
 
 ## References
 
-- [LIB_ARCHITECTURE_PLAN.md](../../docs/LIB_ARCHITECTURE_PLAN.md) - Full architecture plan
-- [SECURITY_ANALYSIS.md](../../docs/SECURITY_ANALYSIS.md) - Security analysis
+- [SECURITY_ANALYSIS.md](../../docs/SECURITY_ANALYSIS.md) - Security analysis of v0 vs v1
 - [HOPPING_ADVERT_PROTOCOL.md](../../docs/HOPPING_ADVERT_PROTOCOL.md) - Discovery protocol
-- [OTA_DESIGN.md](../../docs/OTA_DESIGN.md) - OTA update design
+- [OTA_DESIGN.md](../../docs/OTA_DESIGN.md) - OTA update technical specification
+- [OTA_WORKFLOW.md](../../docs/OTA_WORKFLOW.md) - OTA deployment workflow and implementation
 
 ## API Overview
 

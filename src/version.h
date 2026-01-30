@@ -19,6 +19,11 @@
 #    define MESHGRID_BUILD_DATE __DATE__
 #endif
 
+/* Build timestamp - Unix epoch at compile time (set by set_version.py) */
+#ifndef MESHGRID_BUILD_TIMESTAMP
+#    define MESHGRID_BUILD_TIMESTAMP 0
+#endif
+
 /* Git commit hash (set by CI) */
 #ifndef MESHGRID_GIT_HASH
 #    define MESHGRID_GIT_HASH ""
